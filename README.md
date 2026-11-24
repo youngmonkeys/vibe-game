@@ -19,6 +19,7 @@ Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds 
 | `src/` | Your game. The sample here moves a square and logs in as a guest. |
 | `config/configs.json` | Server addresses packed into the game as `/config/configs.json` |
 | `assets/` | Your game's files, packed as `/assets` |
+| `docs/project-structure.md` | The cross-platform guide: library stack, project layout, SDL3 conventions, per-platform builds, web rules, checklist |
 
 ## Build
 
