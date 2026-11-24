@@ -8,7 +8,7 @@ Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds 
 |---|---|
 | `lib/vibe/` | The engine (namespace `vibe`). Do not edit it for one game; changes here are shared by every game built on it. |
 | `lib/vibe/sdl/` | The SDL backend: the SDL main callbacks (they ask your game for a `vibe::Game` through `vibe::createGame()`), `App` (frame loop, fixed 40 Hz step), the ImGui dev overlay, and the conversion from SDL events to `vibe::InputEvent`. The only engine headers that name SDL types live here. |
-| `lib/vibe/core/` | `Game`, `Scene`, `Input` (events, keys, gamepads), `HostConfig`, `Log`, `Time` |
+| `lib/vibe/core/` | `Game`, `Scene`, `SceneStack`, `Input` (events, keys, gamepads), `ActionMap`, `HostConfig`, `Log`, `Time` |
 | `lib/vibe/render/` | `Renderer` (owns the window; SDL_Renderer: rects, circles, sprites, nine-slice, gradients, debug text), `Camera`, `Texture`, `Text` (SDL3_ttf) |
 | `lib/vibe/math/` | `Vec3`, `Vec4`, `Quat`, `Mat4`, `Transform`: the 3D math every part of the engine shares |
 | `lib/vibe/node/` | `Node` (a tree of nodes, the Composite pattern), `NodeScene`, `SpriteNode` |
@@ -63,7 +63,7 @@ Every `.cpp` and `.mm` under `src/` is compiled. Put a file in `platform/` with 
 class MyGame final : public vibe::Game {
 public:
     std::unique_ptr<vibe::Scene> createInitialScene(const vibe::GameContext& context) override {
-        return std::make_unique<MyScene>(context.renderer, context.config);
+        return std::make_unique<MyScene>(context.renderer, context.config, context.scenes);
     }
 };
 
@@ -178,11 +178,42 @@ Scenes, nodes and widgets get a `vibe::InputEvent`, never an SDL event, so the p
 
 `vibe::input` reads what is held now: `keyHeld(Key::W)`, `gamepadOpen(slot)`, `gamepadAxis(slot, GamepadAxis::LeftX)` (-1 to 1), `gamepadButtonHeld(slot, GamepadButton::South)`, `textInputActive()`. The engine opens up to `input::kMaxGamepads` gamepads as they connect and closes them when they go.
 
+`vibe::input::ActionMap` (`vibe/core/ActionMap.h`) lets gameplay read actions instead of keys, so bindings can change without touching the code that reads them. An action is any enum of the game's own:
+
+```cpp
+enum class Action { Up, Down, Left, Right, Jump };
+
+vibe::input::ActionMap actions;
+actions.bindKey(Action::Up, vibe::Key::W).bindKey(Action::Up, vibe::Key::Up)
+    .bindAxis(Action::Up, vibe::GamepadAxis::LeftY, -1.0f);
+actions.bindKey(Action::Jump, vibe::Key::Space).bindButton(Action::Jump, vibe::GamepadButton::South);
+
+actions.held(Action::Up);            // in fixedUpdate: a key, a button or a stick past kStickThreshold, on any gamepad
+actions.pressed(Action::Jump, event); // in onEvent: a key down (not a repeat) or a button down bound to Jump
+```
+
+Keys bind by `physicalKey`. `unbind(action)` and `clear()` remove bindings, so a settings screen can rebind at run time.
+
 `Game::update()` returns `vibe::AppResult::Continue`, `Success` (stop cleanly) or `Failure`. `vibe::logInfo`, `logWarn`, `logError`, `logDebug` (printf style) and `vibe::ticksMs()`, `ticksNs()` cover logging and time.
 
 ## Scenes and the frame
 
 `vibe::App` calls, in order, on every frame: `Game::update`, `Scene::frameStart` (drain the network here with `Session::update`), `Scene::fixedUpdate` at 40 Hz as many times as the clock needs, `Scene::render(alpha)` between the renderer's begin and end, `Scene::frameEnd` (send with `Session::flush`), `Game::flush`. Nothing may block the frame: no sleeps, no synchronous network calls. The browser build runs on one thread.
+
+The scenes live on a `vibe::SceneStack`, `context.scenes` in `GameContext`; the initial scene is its first entry. Keep the reference to change scenes later:
+
+| Call | Effect |
+|---|---|
+| `scenes.replace<Next>(args...)` | the top scene leaves, `Next` enters (a menu to the game, the game to its result) |
+| `scenes.push<Next>(args...)` | `Next` enters on top; the scenes under it stay (a pause menu, a dialog) |
+| `scenes.pop()` | the top scene leaves |
+| `scenes.clear()` | every scene leaves, top first |
+
+Changes wait until the scene that asked has returned: App applies them after each event and at the start and end of each frame, so a scene may pop itself from `onEvent`. `onLeave` runs before the scene is destroyed.
+
+With several scenes on the stack, only the top one gets `onEvent` and `fixedUpdate`, so the scenes under a pause menu stop. Every scene still gets `frameStart` (bottom first) and `frameEnd` (top first), so a scene under a menu keeps its network session alive. `render` starts at the highest scene whose `opaque()` is true (the default) and goes up; an overlay returns false to draw over the scene below. The sample's `PauseScene` (P) is such an overlay.
+
+A scene can also own a `SceneStack` for scenes of its own and call `apply`, `onEvent`, `frameStart`, `fixedUpdate`, `render` and `frameEnd` itself, for example a shell scene that keeps the login and the network while matches come and go inside it.
 
 ## Logging in
 

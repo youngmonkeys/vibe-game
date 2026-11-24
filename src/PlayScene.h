@@ -2,17 +2,35 @@
 
 #include <string>
 
+#include "vibe/core/ActionMap.h"
 #include "vibe/core/HostConfig.h"
 #include "vibe/core/Input.h"
 #include "vibe/core/Scene.h"
+#include "vibe/core/SceneStack.h"
 #include "vibe/net/Session.h"
 #include "vibe/render/Renderer.h"
 
 namespace game {
 
+enum class Action { Up, Down, Left, Right, Login, Pause };
+
+class PauseScene final : public vibe::Scene {
+public:
+    PauseScene(vibe::Renderer& renderer, vibe::SceneStack& scenes, const vibe::input::ActionMap& actions);
+
+    bool opaque() const override { return false; }
+    void onEvent(const vibe::InputEvent& event) override;
+    void render(float alpha) override;
+
+private:
+    vibe::Renderer& renderer_;
+    vibe::SceneStack& scenes_;
+    const vibe::input::ActionMap& actions_;
+};
+
 class PlayScene final : public vibe::Scene, private vibe::net::SessionListener {
 public:
-    PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config);
+    PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config, vibe::SceneStack& scenes);
 
     void onEvent(const vibe::InputEvent& event) override;
     void frameStart() override;
@@ -28,6 +46,8 @@ private:
     void onHttpFailed(const vibe::net::HttpFailed& failed);
 
     vibe::Renderer& renderer_;
+    vibe::SceneStack& scenes_;
+    vibe::input::ActionMap actions_;
     vibe::net::Protocol protocol_;
     vibe::net::Session session_;
     vibe::net::Subscriptions subscriptions_;

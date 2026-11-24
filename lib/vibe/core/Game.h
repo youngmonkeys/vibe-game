@@ -4,6 +4,7 @@
 
 #include "vibe/core/HostConfig.h"
 #include "vibe/core/Scene.h"
+#include "vibe/core/SceneStack.h"
 #include "vibe/audio/Audio.h"
 #include "vibe/render/Renderer.h"
 
@@ -14,6 +15,7 @@ enum class AppResult { Continue, Success, Failure };
 struct GameContext {
     Renderer& renderer;
     const HostConfig& config;
+    SceneStack& scenes;
     int argc = 0;
     char** argv = nullptr;
 

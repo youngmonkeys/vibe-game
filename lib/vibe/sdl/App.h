@@ -10,6 +10,7 @@
 #include "vibe/core/Game.h"
 #include "vibe/core/HostConfig.h"
 #include "vibe/core/Scene.h"
+#include "vibe/core/SceneStack.h"
 #include "vibe/render/Renderer.h"
 
 #ifdef VIBE_DEV
@@ -33,7 +34,7 @@ private:
 
     Renderer renderer_;
     std::unique_ptr<Game> game_;
-    std::unique_ptr<Scene> scene_;
+    SceneStack scenes_;
     HostConfig config_;
     FixedStepClock clock_;
 #ifdef VIBE_DEV

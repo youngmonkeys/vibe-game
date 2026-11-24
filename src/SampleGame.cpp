@@ -9,7 +9,7 @@ namespace {
 class SampleGame final : public vibe::Game {
 public:
     std::unique_ptr<vibe::Scene> createInitialScene(const vibe::GameContext& context) override {
-        return std::make_unique<PlayScene>(context.renderer, context.config);
+        return std::make_unique<PlayScene>(context.renderer, context.config, context.scenes);
     }
 };
 

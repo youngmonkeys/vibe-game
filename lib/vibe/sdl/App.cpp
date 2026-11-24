@@ -111,13 +111,15 @@ SDL_AppResult App::init(int argc, char* argv[]) {
     // A failed overlay is not fatal; the lobby then draws nothing.
     overlay_.init(sdl::window(renderer_), sdl::renderer(renderer_));
 #endif
-    const GameContext context{renderer_, config_, argc, argv};
-    scene_ = game_->createInitialScene(context);
-    if (!scene_) {
-        scene_ = std::make_unique<EmptyScene>();
+    const GameContext context{renderer_, config_, scenes_, argc, argv};
+    std::unique_ptr<Scene> initial = game_->createInitialScene(context);
+    if (!initial) {
+        initial = std::make_unique<EmptyScene>();
     }
-    scene_->onEnter();
+    scenes_.push(std::move(initial));
+    scenes_.apply();
     game_->onStart(context);
+    scenes_.apply();
 
     const std::uint64_t now = SDL_GetTicksNS();
     clock_.restart(now);
@@ -181,9 +183,8 @@ SDL_AppResult App::onEvent(const SDL_Event& event) {
         return SDL_APP_CONTINUE;
     }
     audio::onEvent(input);
-    if (scene_) {
-        scene_->onEvent(input);
-    }
+    scenes_.onEvent(input);
+    scenes_.apply();
     return SDL_APP_CONTINUE;
 }
 
@@ -198,24 +199,26 @@ SDL_AppResult App::iterate() {
     if (hidden_) {
         return SDL_APP_CONTINUE;
     }
-    scene_->frameStart();
+    scenes_.apply();
+    scenes_.frameStart();
     const std::uint64_t now = SDL_GetTicksNS();
     const int steps = clock_.advance(now);
     for (int i = 0; i < steps; ++i) {
-        scene_->fixedUpdate(FixedStepClock::kStepSeconds);
+        scenes_.fixedUpdate(FixedStepClock::kStepSeconds);
     }
     // No draw and no present when the canvas has no pixels.
     if (renderer_.beginFrame(game_->clearColor())) {
 #ifdef VIBE_DEV
         overlay_.beginFrame();
 #endif
-        scene_->render(clock_.alpha());
+        scenes_.render(clock_.alpha());
 #ifdef VIBE_DEV
         overlay_.endFrame();
 #endif
         renderer_.endFrame();
     }
-    scene_->frameEnd();
+    scenes_.frameEnd();
+    scenes_.apply();
     recordLoopStats(now, steps);
     game_->flush();
     return SDL_APP_CONTINUE;
@@ -225,10 +228,8 @@ void App::quit(SDL_AppResult result) {
     if (game_) {
         game_->onQuit();
     }
-    if (scene_) {
-        scene_->onLeave();
-        scene_.reset();
-    }
+    scenes_.clear();
+    scenes_.apply();
     audio::shutdown();
 #ifdef VIBE_DEV
     overlay_.shutdown();

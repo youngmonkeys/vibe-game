@@ -151,12 +151,12 @@ The engine is not copied into a game. A game points `VIBE_GAME_DIR` at this repo
 | Point | Engine | Game |
 |---|---|---|
 | Entry | `lib/vibe/sdl/main.cpp`, `vibe::App` | `std::unique_ptr<vibe::Game> vibe::createGame()` |
-| Scenes | `vibe::Game::createInitialScene(const GameContext&)`, optional `audioCues`, `clearColor`, `onStart`, `update`, `flush`, `onQuit` | its own `vibe::Scene` subclasses |
+| Scenes | `vibe::Game::createInitialScene(const GameContext&)`, optional `audioCues`, `clearColor`, `onStart`, `update`, `flush`, `onQuit`; `vibe::SceneStack` (`context.scenes`) with `push`, `replace`, `pop` | its own `vibe::Scene` subclasses |
 | Identity | `VIBE_APP_NAME`, `VIBE_APP_ORG`, `VIBE_APP_ID` (window title, log tag, prefs path, session key, user agent) | `vibe_add_game(<target> NAME ORG ID BUNDLE_ID ...)` |
 | Dev-only code | `lib/vibe/sdl/debug/`, `lib/vibe/ui/dev/`, `VIBE_DEV` | `DEV_DIRS` folders under `src/`, extra web exports in `WEB_DEV_EXPORTS` |
 | Network messages | core messages + the game's lists joined into one flat `vibe::net::InboundMessage` variant; `vibe::net::Protocol` maps app command names and HTTP steps to decoders; `Session::messages()` delivers each message to the handlers subscribed to its type | `net/GameProtocol.h` with the message lists, a `Protocol` passed to every `Session`, handlers on `session.messages()` |
 | Requests | `Session::send(request)` for app commands, `Session::request(request)` and `inFlight<Request>()` for HTTP steps from `vibe::net::gameHttpStep(0)` up | one struct per request: `kCommand` and `encode`, or `kStep`, `kMethod`, `kPath` or `path()`, `body()`, `firstPage` |
-| Input | `vibe::InputEvent` to `Scene::onEvent`, `Node::onEvent` and the widgets; `vibe::input::keyHeld`, gamepad slots | reads `InputEvent` and `vibe::input`, never `SDL_Event` |
+| Input | `vibe::InputEvent` to `Scene::onEvent`, `Node::onEvent` and the widgets; `vibe::input::keyHeld`, gamepad slots; `vibe::input::ActionMap` | reads `InputEvent`, `vibe::input` and its own `ActionMap` bindings, never `SDL_Event` |
 | Platform files | `platform/` defaults with `@VIBE_APP_NAME@` placeholders | overrides in its own `platform/` |
 
 Folders marked (planned) do not exist yet; add them at that path when the engine needs them, so every game finds them in the same place.

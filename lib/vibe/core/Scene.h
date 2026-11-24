@@ -12,6 +12,7 @@ public:
 
     virtual void onEnter() {}
     virtual void onLeave() {}
+    virtual bool opaque() const { return true; }
     virtual void onEvent(const InputEvent& /*event*/) {}
     // Once per frame before the fixed steps: drain the network (plan 07).
     virtual void frameStart() {}

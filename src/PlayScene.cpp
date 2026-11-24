@@ -15,16 +15,65 @@ vibe::net::SessionConfig sessionConfig(const vibe::HostConfig& config) {
                                     config.socketUrl, config.udpUsage,  config.udpPort};
 }
 
+vibe::input::ActionMap defaultActions() {
+    using vibe::GamepadAxis;
+    using vibe::GamepadButton;
+    using vibe::Key;
+    vibe::input::ActionMap actions;
+    actions.bindKey(Action::Up, Key::W)
+        .bindKey(Action::Up, Key::Up)
+        .bindAxis(Action::Up, GamepadAxis::LeftY, -1.0f);
+    actions.bindKey(Action::Down, Key::S)
+        .bindKey(Action::Down, Key::Down)
+        .bindAxis(Action::Down, GamepadAxis::LeftY, 1.0f);
+    actions.bindKey(Action::Left, Key::A)
+        .bindKey(Action::Left, Key::Left)
+        .bindAxis(Action::Left, GamepadAxis::LeftX, -1.0f);
+    actions.bindKey(Action::Right, Key::D)
+        .bindKey(Action::Right, Key::Right)
+        .bindAxis(Action::Right, GamepadAxis::LeftX, 1.0f);
+    actions.bindKey(Action::Login, Key::L).bindButton(Action::Login, GamepadButton::South);
+    actions.bindKey(Action::Pause, Key::P).bindButton(Action::Pause, GamepadButton::Start);
+    return actions;
+}
+
 } // namespace
 
-PlayScene::PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config)
-    : renderer_(renderer), session_(sessionConfig(config), protocol_, *this) {
+PauseScene::PauseScene(vibe::Renderer& renderer, vibe::SceneStack& scenes, const vibe::input::ActionMap& actions)
+    : renderer_(renderer), scenes_(scenes), actions_(actions) {}
+
+void PauseScene::onEvent(const vibe::InputEvent& event) {
+    if (actions_.pressed(Action::Pause, event)) {
+        scenes_.pop();
+    }
+}
+
+void PauseScene::render(float /*alpha*/) {
+    const vibe::Viewport& viewport = renderer_.viewport();
+    const float width = static_cast<float>(viewport.widthPx);
+    const float height = static_cast<float>(viewport.heightPx);
+    renderer_.fillScreenRectAt(0.0f, 0.0f, width, height, vibe::Color{0, 0, 0, 150});
+    renderer_.drawScreenText(width * 0.5f - 96.0f, height * 0.5f - 12.0f, "PAUSED", vibe::Color{255, 255, 255, 255},
+                             4.0f);
+    renderer_.drawScreenText(width * 0.5f - 120.0f, height * 0.5f + 32.0f, "P to resume",
+                             vibe::Color{200, 210, 230, 255}, 2.0f);
+}
+
+PlayScene::PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config, vibe::SceneStack& scenes)
+    : renderer_(renderer),
+      scenes_(scenes),
+      actions_(defaultActions()),
+      session_(sessionConfig(config), protocol_, *this) {
     subscriptions_ += session_.messages().on(this, &PlayScene::onGameServers);
     subscriptions_ += session_.messages().on(this, &PlayScene::onHttpFailed);
 }
 
 void PlayScene::onEvent(const vibe::InputEvent& event) {
-    if (event.isKeyDown(vibe::Key::L) && !event.repeat) {
+    if (actions_.pressed(Action::Pause, event)) {
+        scenes_.push<PauseScene>(renderer_, scenes_, actions_);
+        return;
+    }
+    if (actions_.pressed(Action::Login, event)) {
         if (session_.quickPlay()) {
             status_ = "Registering a guest account...";
         }
@@ -52,10 +101,8 @@ void PlayScene::fixedUpdate(float stepSeconds) {
     }
     previousX_ = x_;
     previousY_ = y_;
-    using vibe::Key;
-    using vibe::input::keyHeld;
-    float dx = static_cast<float>((keyHeld(Key::D) || keyHeld(Key::Right)) - (keyHeld(Key::A) || keyHeld(Key::Left)));
-    float dy = static_cast<float>((keyHeld(Key::S) || keyHeld(Key::Down)) - (keyHeld(Key::W) || keyHeld(Key::Up)));
+    float dx = static_cast<float>(actions_.held(Action::Right) - actions_.held(Action::Left));
+    float dy = static_cast<float>(actions_.held(Action::Down) - actions_.held(Action::Up));
     if (dx != 0.0f || dy != 0.0f) {
         hasTarget_ = false;
     } else if (hasTarget_) {
@@ -88,7 +135,8 @@ void PlayScene::render(float alpha) {
         renderer_.fillScreenCircle(targetX_, targetY_, 6.0f, vibe::Color{255, 255, 255, 160});
     }
     renderer_.drawScreenText(16.0f, 16.0f, "VIBE GAME SAMPLE", vibe::Color{255, 255, 255, 255}, 3.0f);
-    renderer_.drawScreenText(16.0f, 56.0f, "Move: WASD, arrows, click or tap", vibe::Color{200, 210, 230, 255}, 2.0f);
+    renderer_.drawScreenText(16.0f, 56.0f, "Move: WASD, arrows, stick, click or tap. P: pause",
+                             vibe::Color{200, 210, 230, 255}, 2.0f);
     renderer_.drawScreenText(16.0f, 84.0f, status_.c_str(), vibe::Color{200, 210, 230, 255}, 2.0f);
 }
 
