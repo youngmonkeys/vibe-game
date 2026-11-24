@@ -1,0 +1,307 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "web-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+        },
+        {
+            "name": "web-debug",
+            "displayName": "Web, Debug",
+            "inherits": "web-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "web-asan",
+            "displayName": "Web, Debug with AddressSanitizer and UBSan",
+            "inherits": "web-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "VIBE_SANITIZE": "ON"
+            }
+        },
+        {
+            "name": "web-release",
+            "displayName": "Web, Release (-O2, symbol map split out)",
+            "inherits": "web-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_C_FLAGS_RELEASE": "-O2 -DNDEBUG",
+                "CMAKE_CXX_FLAGS_RELEASE": "-O2 -DNDEBUG",
+                "CMAKE_EXE_LINKER_FLAGS_RELEASE": "-O2"
+            }
+        },
+        {
+            "name": "mac-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "13.3"
+            }
+        },
+        {
+            "name": "mac-debug",
+            "displayName": "macOS, Debug (VibeGame.app, TCP)",
+            "inherits": "mac-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "mac-release",
+            "displayName": "macOS, Release (VibeGame.app, TCP)",
+            "inherits": "mac-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "ios-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "16.4"
+            }
+        },
+        {
+            "name": "ios-sim-debug",
+            "displayName": "iOS Simulator, Debug (VibeGame.app, TCP)",
+            "inherits": "ios-base",
+            "cacheVariables": {
+                "CMAKE_OSX_SYSROOT": "iphonesimulator",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ios-sim-release",
+            "displayName": "iOS Simulator, Release (VibeGame.app, TCP)",
+            "inherits": "ios-base",
+            "cacheVariables": {
+                "CMAKE_OSX_SYSROOT": "iphonesimulator",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "android-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",
+            "cacheVariables": {
+                "ANDROID_ABI": "arm64-v8a",
+                "ANDROID_PLATFORM": "android-24",
+                "ANDROID_STL": "c++_static"
+            }
+        },
+        {
+            "name": "android-debug",
+            "displayName": "Android arm64, Debug (VibeGame.apk, TCP)",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "android-release",
+            "displayName": "Android arm64, Release (VibeGame.apk, TCP)",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "windows-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/mingw-w64-x86_64.cmake"
+        },
+        {
+            "name": "windows-debug",
+            "displayName": "Windows x64, Debug (VibeGame.exe, TCP, MinGW-w64 cross build)",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "windows-release",
+            "displayName": "Windows x64, Release (VibeGame.exe, TCP, MinGW-w64 cross build)",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "Linux x64, Debug (VibeGame, TCP)",
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux x64, Release (VibeGame, TCP)",
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "web-debug",
+            "configurePreset": "web-debug"
+        },
+        {
+            "name": "web-asan",
+            "configurePreset": "web-asan"
+        },
+        {
+            "name": "web-release",
+            "configurePreset": "web-release"
+        },
+        {
+            "name": "mac-debug",
+            "configurePreset": "mac-debug"
+        },
+        {
+            "name": "mac-release",
+            "configurePreset": "mac-release"
+        },
+        {
+            "name": "ios-sim-debug",
+            "configurePreset": "ios-sim-debug"
+        },
+        {
+            "name": "ios-sim-release",
+            "configurePreset": "ios-sim-release"
+        },
+        {
+            "name": "android-debug",
+            "configurePreset": "android-debug"
+        },
+        {
+            "name": "android-release",
+            "configurePreset": "android-release"
+        },
+        {
+            "name": "windows-debug",
+            "configurePreset": "windows-debug"
+        },
+        {
+            "name": "windows-release",
+            "configurePreset": "windows-release"
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug"
+        },
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "web-debug",
+            "configurePreset": "web-debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        },
+        {
+            "name": "web-asan",
+            "configurePreset": "web-asan",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        },
+        {
+            "name": "web-release",
+            "configurePreset": "web-release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        },
+        {
+            "name": "mac-debug",
+            "configurePreset": "mac-debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        },
+        {
+            "name": "mac-release",
+            "configurePreset": "mac-release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        },
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "ignore"
+            }
+        }
+    ]
+}

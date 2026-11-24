@@ -1,0 +1,20 @@
+{
+	"http": {
+		"host": "http://localhost",
+		"port": 8080,
+		"hostOnly": false
+	},
+	"master": {
+		"host": "http://localhost",
+		"port": 8080,
+		"hostOnly": false
+	},
+	"socket": {
+		"zoneName": "game",
+		"appName": "vibegame",
+		"webSocketUrl": "ws://127.0.0.1:2208/ws",
+		"tcpUrl": "tcp://127.0.0.1:3005",
+		"udpUsage": false,
+		"udpPort": 2611
+	}
+}
