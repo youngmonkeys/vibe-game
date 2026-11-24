@@ -98,17 +98,24 @@ vibe-game/
 │   └── vibe/               the engine, namespace vibe, included as "vibe/..."
 │       ├── main.cpp        SDL main callbacks only; asks the game for vibe::createGame()
 │       ├── core/           App (window, loop, fixed step), Game, Scene, HostConfig, Log, AppInfo, debug/ (ImGui)
-│       ├── render/         Renderer (SDL_Renderer), Camera, Texture, Text (SDL3_ttf)
+│       ├── render/         Renderer (SDL_Renderer), Camera, Texture, Text (SDL3_ttf); SDL_GPU later
+│       ├── physics/        (planned) Jolt / Box2D wrappers
 │       ├── audio/          music stream and effects by cue name
+│       ├── assets/         (planned) asset loading via SDL_IOStream (manifest, atlases, glTF, KTX2)
 │       ├── platform/       ALL platform-specific code: device, fullscreen, paste, touch text, prefs, token store; web/, desktop/
 │       ├── ui/             immediate-mode widgets; dev/ (dev builds only)
 │       └── net/            ezylogin, game master, EzyFox session, decoders; transport/{web,tcp,apple,android,windows,linux}
-├── platform/               default templates: web shell, Info.plist (macos, ios), AndroidManifest, engine Java, icons
+├── platform/               default templates and engine platform files
+│   ├── android/            AndroidManifest.xml.in, engine Java (VibeActivity, VibeHttp, VibeCrypto); APK built without Gradle
+│   ├── ios/                Info.plist.in; (planned) LaunchScreen.storyboard, icons
+│   ├── macos/              Info.plist.in; (planned) icons
+│   └── web/                shell.html, shell.js, idbfs.js, manifest, icons; (planned) web server config (COOP/COEP headers)
+├── shaders/                (planned) HLSL sources (*.vert.hlsl, *.frag.hlsl), compiled offline with SDL_shadercross
 ├── src/                    the game (here: the sample, one scene and a guest login)
 │   └── net/GameProtocol.h  the game's messages and protocol hooks
 ├── assets/                 runtime assets, packed as /assets (png, ogg, ttf, json)
 ├── config/configs.json     server addresses, packed as /config/configs.json
-├── tools/                  asset build scripts (when a game adds them)
+├── tools/                  (planned) asset and shader build scripts
 ├── consoles/               PRIVATE git submodule (NDA code), absent in public checkouts
 │   ├── ps5/
 │   ├── xbox/
@@ -147,6 +154,8 @@ The engine is not copied into a game. A game points `VIBE_GAME_DIR` at this repo
 | Network messages | core messages + the game's lists joined into one flat `vibe::net::InboundMessage` variant | `net/GameProtocol.h` with `decodeGameCommand`, `decodeGameHttp`, `gameHttpStepName`, `isStreamMessage`, `coalesceStream` |
 | HTTP | `Session::requestApi(step, method, path, body)` for steps from `vibe::net::gameHttpStep(0)` up | its step constants and decoders |
 | Platform files | `platform/` defaults with `@VIBE_APP_NAME@` placeholders | overrides in its own `platform/` |
+
+Folders marked (planned) do not exist yet; add them at that path when the engine needs them, so every game finds them in the same place.
 
 Rules:
 - Do not put `#ifdef _WIN32 / __APPLE__ / __ANDROID__ / __EMSCRIPTEN__` (or any console macro) outside `lib/vibe/platform/` and `lib/vibe/net/transport/`. Game code has none.
