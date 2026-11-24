@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <nlohmann/json.hpp>
 
 namespace vibe::net {
 namespace {
@@ -377,8 +378,6 @@ bool isSecret(const Json& frame, int command) {
     return command == kTcpCommandLogin || (command == kTcpCommandAppRequest && isSecretAppRequest(frame));
 }
 
-} // namespace
-
 bool msgpackToJson(std::string_view bytes, Json& out, std::string& error) {
     Cursor c{reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size(), 0};
     if (!readValue(c, 0, out, error)) {
@@ -392,6 +391,27 @@ bool msgpackToJson(std::string_view bytes, Json& out, std::string& error) {
 
 void jsonToMsgpack(const Json& value, std::string& out) {
     writeValue(value, out);
+}
+
+} // namespace
+
+bool msgpackToJsonText(std::string_view bytes, std::string& jsonText, std::string& error) {
+    Json value;
+    if (!msgpackToJson(bytes, value, error)) {
+        return false;
+    }
+    jsonText = value.dump(-1, ' ', false, Json::error_handler_t::replace);
+    return true;
+}
+
+bool jsonTextToMsgpack(std::string_view jsonText, std::string& out) {
+    const Json value = Json::parse(jsonText.begin(), jsonText.end(), nullptr, false);
+    if (value.is_discarded()) {
+        return false;
+    }
+    out.clear();
+    jsonToMsgpack(value, out);
+    return true;
 }
 
 bool encodeTcpContent(std::string_view jsonFrame, std::string_view clientKey, std::string& content, int& command,

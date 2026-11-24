@@ -1,7 +1,5 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
-
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -9,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "vibe/core/Input.h"
 #include "vibe/math/Transform.h"
 
 namespace vibe {
@@ -71,7 +70,7 @@ public:
 
     void enterTree();
     void exitTree();
-    bool dispatchEvent(const SDL_Event& event);
+    bool dispatchEvent(const InputEvent& event);
     void fixedUpdate(float stepSeconds);
     void render(Renderer& renderer, float alpha);
     void flushPending();
@@ -79,7 +78,7 @@ public:
 protected:
     virtual void onEnterTree() {}
     virtual void onExitTree() {}
-    virtual bool onEvent(const SDL_Event& /*event*/) { return false; }
+    virtual bool onEvent(const InputEvent& /*event*/) { return false; }
     virtual void onFixedUpdate(float /*stepSeconds*/) {}
     virtual void onRender(Renderer& /*renderer*/, const Mat4& /*world*/) {}
 

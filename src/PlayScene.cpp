@@ -1,9 +1,8 @@
 #include "PlayScene.h"
 
-#include <SDL3/SDL_keyboard.h>
-#include <SDL3/SDL_log.h>
-
 #include <cmath>
+
+#include "vibe/core/Log.h"
 
 namespace game {
 namespace {
@@ -24,23 +23,18 @@ PlayScene::PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config)
     subscriptions_ += session_.messages().on(this, &PlayScene::onHttpFailed);
 }
 
-void PlayScene::onEvent(const SDL_Event& event) {
-    if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_L) {
+void PlayScene::onEvent(const vibe::InputEvent& event) {
+    if (event.isKeyDown(vibe::Key::L) && !event.repeat) {
         if (session_.quickPlay()) {
             status_ = "Registering a guest account...";
         }
         return;
     }
-    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_FINGER_DOWN) {
-        SDL_Event local = event;
+    if (event.type == vibe::EventType::MouseButtonDown || event.type == vibe::EventType::FingerDown) {
+        vibe::InputEvent local = event;
         renderer_.toCanvasCoordinates(local);
-        if (local.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            targetX_ = local.button.x;
-            targetY_ = local.button.y;
-        } else {
-            targetX_ = local.tfinger.x;
-            targetY_ = local.tfinger.y;
-        }
+        targetX_ = local.x;
+        targetY_ = local.y;
         hasTarget_ = true;
     }
 }
@@ -58,11 +52,10 @@ void PlayScene::fixedUpdate(float stepSeconds) {
     }
     previousX_ = x_;
     previousY_ = y_;
-    const bool* keys = SDL_GetKeyboardState(nullptr);
-    float dx = static_cast<float>((keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) -
-                                  (keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT]));
-    float dy = static_cast<float>((keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) -
-                                  (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]));
+    using vibe::Key;
+    using vibe::input::keyHeld;
+    float dx = static_cast<float>((keyHeld(Key::D) || keyHeld(Key::Right)) - (keyHeld(Key::A) || keyHeld(Key::Left)));
+    float dy = static_cast<float>((keyHeld(Key::S) || keyHeld(Key::Down)) - (keyHeld(Key::W) || keyHeld(Key::Up)));
     if (dx != 0.0f || dy != 0.0f) {
         hasTarget_ = false;
     } else if (hasTarget_) {
@@ -113,7 +106,7 @@ void PlayScene::onSessionReady() {
 }
 
 void PlayScene::onSessionFailed(const std::string& reason, const std::string& message) {
-    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "sample: %s", reason.c_str());
+    vibe::logWarn("sample: %s", reason.c_str());
     status_ = message + " (L to retry)";
 }
 

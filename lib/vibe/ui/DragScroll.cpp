@@ -19,26 +19,26 @@ constexpr float kOffScreen = -1.0e6f;
 
 } // namespace
 
-bool DragScroll::onEvent(SDL_Event& event, const ScreenRect& area, float slopPx) {
+bool DragScroll::onEvent(InputEvent& event, const ScreenRect& area, float slopPx) {
     switch (event.type) {
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (event.button.button != SDL_BUTTON_LEFT) {
+    case EventType::MouseButtonDown:
+        if (event.button != MouseButton::Left) {
             return false;
         }
         // A touch stops a fling, as on a phone.
         flinging_ = false;
         velocity_ = 0.0f;
-        armed_ = area.contains(event.button.x, event.button.y);
+        armed_ = area.contains(event.x, event.y);
         dragging_ = false;
-        startPos_ = lastPos_ = along(event.button.x, event.button.y);
+        startPos_ = lastPos_ = along(event.x, event.y);
         lastNs_ = SDL_GetTicksNS();
         return false;
-    case SDL_EVENT_MOUSE_MOTION: {
-        if (!armed_ || (event.motion.state & SDL_BUTTON_LMASK) == 0) {
+    case EventType::MouseMotion: {
+        if (!armed_ || !event.leftHeld) {
             armed_ = false;
             return false;
         }
-        const float pos = along(event.motion.x, event.motion.y);
+        const float pos = along(event.x, event.y);
         const std::uint64_t now = SDL_GetTicksNS();
         if (!dragging_) {
             if (std::fabs(pos - startPos_) <= slopPx) {
@@ -57,8 +57,8 @@ bool DragScroll::onEvent(SDL_Event& event, const ScreenRect& area, float slopPx)
         lastNs_ = now;
         return true;
     }
-    case SDL_EVENT_MOUSE_BUTTON_UP: {
-        if (event.button.button != SDL_BUTTON_LEFT) {
+    case EventType::MouseButtonUp: {
+        if (event.button != MouseButton::Left) {
             return false;
         }
         const bool wasDragging = dragging_;
@@ -74,8 +74,8 @@ bool DragScroll::onEvent(SDL_Event& event, const ScreenRect& area, float slopPx)
         } else {
             velocity_ = 0.0f;
         }
-        event.button.x = kOffScreen;
-        event.button.y = kOffScreen;
+        event.x = kOffScreen;
+        event.y = kOffScreen;
         return true;
     }
     default:

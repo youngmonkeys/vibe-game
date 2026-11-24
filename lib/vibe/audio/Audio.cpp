@@ -1,6 +1,7 @@
 #include "vibe/audio/Audio.h"
 
 #include <SDL3/SDL_audio.h>
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_log.h>
@@ -17,7 +18,7 @@
 #include <vector>
 
 #include "vibe/audio/MusicStream.h"
-#include "vibe/audio/StbVorbis.h"
+#include "vibe/audio/Vorbis.h"
 #include "vibe/platform/Device.h"
 #include "vibe/platform/Prefs.h"
 #include "vibe/platform/WebAudio.h"
@@ -50,7 +51,7 @@ public:
     void init(const char* assetRoot, const CueConfig& cues);
     void shutdown();
     void update();
-    void onEvent(const SDL_Event& event);
+    void onEvent(const InputEvent& event);
     void play(Cue cue);
     void setMusic(bool enabled);
     void setEffects(bool enabled);
@@ -157,8 +158,7 @@ void System::loadEffect(Cue cue, const TrackInfo& info) {
     short* pcm = nullptr;
     const int frames = fileSize > static_cast<size_t>(INT_MAX)
                            ? -1
-                           : stb_vorbis_decode_memory(static_cast<const unsigned char*>(file),
-                                                      static_cast<int>(fileSize), &channels, &rate, &pcm);
+                           : decodeVorbis(file, static_cast<int>(fileSize), channels, rate, pcm);
     SDL_free(file);
     if (frames <= 0 || !pcm || channels <= 0 || rate <= 0 || frames > INT_MAX / channels / 2) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "audio: %s: %s is not a playable Ogg Vorbis file", name,
@@ -342,7 +342,7 @@ void System::startMusic() {
     if (!music_.isOpen()) {
         // Opened on the first play, so a player with music off never holds
         // the compressed file in the heap.
-        if (!music_.open(musicPath_.c_str(), spec_, musicVolume_) || !SDL_BindAudioStream(device_, music_.stream())) {
+        if (!music_.open(musicPath_.c_str(), device_, musicVolume_)) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "audio: no music: %s", SDL_GetError());
             music_.close();
             musicBroken_ = true;
@@ -416,28 +416,28 @@ void System::setEffects(bool enabled) {
     play(cues_.click);
 }
 
-void System::onEvent([[maybe_unused]] const SDL_Event& event) {
+void System::onEvent([[maybe_unused]] const InputEvent& event) {
 #ifdef VIBE_DEV
     // Dev keys: M music, N sound effects, B one Attack (no swing), L jump to
     // 3 s before the end of Theme. Plan 11's lobby has the two toggles; the
     // keys stay for tests, but not while a text field takes typing.
-    if (event.type != SDL_EVENT_KEY_DOWN || event.key.repeat) {
+    if (event.type != EventType::KeyDown || event.repeat) {
         return;
     }
-    if (SDL_Window* window = SDL_GetKeyboardFocus(); window && SDL_TextInputActive(window)) {
+    if (input::textInputActive()) {
         return;
     }
-    switch (event.key.scancode) {
-    case SDL_SCANCODE_M:
+    switch (event.physicalKey) {
+    case Key::M:
         setMusic(!settings_.musicEnabled);
         break;
-    case SDL_SCANCODE_N:
+    case Key::N:
         setEffects(!settings_.soundEffectEnabled);
         break;
-    case SDL_SCANCODE_B:
+    case Key::B:
         play(cues_.devTest);
         break;
-    case SDL_SCANCODE_L:
+    case Key::L:
         music_.seekBeforeEnd(3.0f);
         SDL_Log("audio: %s at %.2f s (dev key L)", cueName(cues_.music), static_cast<double>(music_.decodedSeconds()));
         break;
@@ -498,7 +498,7 @@ void init(const char* assetRoot, const CueConfig& cues) {
     gSystem.init(assetRoot, cues);
 }
 
-void onEvent(const SDL_Event& event) {
+void onEvent(const InputEvent& event) {
     gSystem.onEvent(event);
 }
 

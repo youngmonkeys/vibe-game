@@ -1,4 +1,4 @@
-#include "vibe/core/App.h"
+#include "vibe/sdl/App.h"
 
 #include <SDL3/SDL.h>
 
@@ -16,6 +16,7 @@
 #include "vibe/core/Log.h"
 #include "vibe/audio/Audio.h"
 #include "vibe/platform/Device.h"
+#include "vibe/sdl/Sdl.h"
 
 namespace vibe {
 namespace {
@@ -33,6 +34,14 @@ bool enterDirectory(const char* path) {
     return SetCurrentDirectoryW(wide.c_str()) != 0;
 }
 #endif
+
+SDL_AppResult toSdl(AppResult result) {
+    switch (result) {
+    case AppResult::Success: return SDL_APP_SUCCESS;
+    case AppResult::Failure: return SDL_APP_FAILURE;
+    default: return SDL_APP_CONTINUE;
+    }
+}
 
 } // namespace
 
@@ -92,23 +101,7 @@ SDL_AppResult App::init(int argc, char* argv[]) {
         return SDL_APP_FAILURE;
     }
 
-    // The shell sizes the canvas with CSS to fill the page. With a CSS size and
-    // RESIZABLE, SDL's Emscripten backend follows browser resizes and scales the
-    // backing store by devicePixelRatio (research/dependencies.md, Canvas).
-#ifdef __ANDROID__
-    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
-    constexpr SDL_WindowFlags kPlatformWindowFlags = SDL_WINDOW_FULLSCREEN;
-#else
-    constexpr SDL_WindowFlags kPlatformWindowFlags = 0;
-#endif
-    window_ = SDL_CreateWindow(app_info::kName, 1280, 720,
-                               SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | kPlatformWindowFlags |
-                                   Renderer::prepareWindow());
-    if (!window_) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateWindow failed: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-    if (!renderer_.create(window_)) {
+    if (!renderer_.create(app_info::kName, 1280, 720)) {
         return SDL_APP_FAILURE;
     }
     // Plan 10. Not fatal: without a device the game runs silent.
@@ -116,7 +109,7 @@ SDL_AppResult App::init(int argc, char* argv[]) {
 
 #ifdef VIBE_DEV
     // A failed overlay is not fatal; the lobby then draws nothing.
-    overlay_.init(window_, renderer_.sdlRenderer());
+    overlay_.init(sdl::window(renderer_), sdl::renderer(renderer_));
 #endif
     const GameContext context{renderer_, config_, argc, argv};
     scene_ = game_->createInitialScene(context);
@@ -140,6 +133,7 @@ SDL_AppResult App::onEvent(const SDL_Event& event) {
 #else
     const bool overlayOwns = false;
 #endif
+    sdl::onGamepadEvent(event);
     switch (event.type) {
     case SDL_EVENT_QUIT:
         return SDL_APP_SUCCESS;
@@ -182,17 +176,19 @@ SDL_AppResult App::onEvent(const SDL_Event& event) {
     default:
         break;
     }
-    if (!overlayOwns) {
-        audio::onEvent(event);
+    InputEvent input;
+    if (overlayOwns || !sdl::toInputEvent(event, input)) {
+        return SDL_APP_CONTINUE;
     }
-    if (scene_ && !overlayOwns) {
-        scene_->onEvent(event);
+    audio::onEvent(input);
+    if (scene_) {
+        scene_->onEvent(input);
     }
     return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult App::iterate() {
-    const SDL_AppResult gameResult = game_->update();
+    const SDL_AppResult gameResult = toSdl(game_->update());
     if (gameResult != SDL_APP_CONTINUE) {
         return gameResult;
     }
@@ -237,11 +233,8 @@ void App::quit(SDL_AppResult result) {
 #ifdef VIBE_DEV
     overlay_.shutdown();
 #endif
+    sdl::closeGamepads();
     renderer_.destroy();
-    if (window_) {
-        SDL_DestroyWindow(window_);
-        window_ = nullptr;
-    }
     game_.reset();
     SDL_Log("%s", result == SDL_APP_FAILURE ? "stopped after an error" : "stopped");
 }

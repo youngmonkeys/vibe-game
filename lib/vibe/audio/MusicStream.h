@@ -1,11 +1,8 @@
 #pragma once
 
-#include <SDL3/SDL_audio.h>
-
+#include <cstddef>
 #include <cstdint>
-#include <vector>
-
-struct stb_vorbis;
+#include <memory>
 
 namespace vibe::audio {
 
@@ -20,24 +17,21 @@ class MusicStream {
 public:
     static constexpr float kQueueSeconds = 0.25f;
 
-    MusicStream() = default;
+    MusicStream();
     MusicStream(const MusicStream&) = delete;
     MusicStream& operator=(const MusicStream&) = delete;
     ~MusicStream();
 
-    // Reads the file and opens the decoder. `device` is the output format.
+    // Reads the file, opens the decoder and binds the stream to `device`.
     // Logs and returns false on failure.
-    bool open(const char* path, const SDL_AudioSpec& device, float gain);
+    bool open(const char* path, std::uint32_t device, float gain);
     void close();
-    bool isOpen() const { return vorbis_ != nullptr; }
-
-    // The stream to bind to the device. Null until open.
-    SDL_AudioStream* stream() const { return stream_; }
+    bool isOpen() const;
 
     // From the start of the track.
     void start();
     void stop();
-    bool playing() const { return playing_; }
+    bool playing() const;
 
 #ifdef VIBE_DEV
     // Jumps to `seconds` before the end, to hear the loop (dev key).
@@ -47,26 +41,13 @@ public:
     // Seconds into the track at the decoder (ahead of what is heard by the
     // queue), loops completed, and the queued amount in seconds.
     float decodedSeconds() const;
-    unsigned loops() const { return loops_; }
+    unsigned loops() const;
     float queuedSeconds() const;
-    std::size_t compressedBytes() const { return fileSize_; }
+    std::size_t compressedBytes() const;
 
 private:
-    static void SDLCALL onNeedData(void* userdata, SDL_AudioStream* stream, int additional, int total);
-    void topUp();
-
-    void* file_ = nullptr; // SDL_LoadFile; stb_vorbis reads from it
-    std::size_t fileSize_ = 0;
-    stb_vorbis* vorbis_ = nullptr;
-    SDL_AudioStream* stream_ = nullptr;
-    int channels_ = 0;
-    int sampleRate_ = 0;
-    unsigned totalSamples_ = 0;
-    int targetBytes_ = 0;
-    std::vector<float> chunk_; // one decode, reused
-    bool playing_ = false;
-    unsigned loops_ = 0;
-    bool warnedDecode_ = false;
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace vibe::audio

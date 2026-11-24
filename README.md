@@ -7,9 +7,9 @@ Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds 
 | Path | What |
 |---|---|
 | `lib/vibe/` | The engine (namespace `vibe`). Do not edit it for one game; changes here are shared by every game built on it. |
-| `lib/vibe/main.cpp` | The SDL main callbacks. It asks your game for a `vibe::Game` through `vibe::createGame()`. |
-| `lib/vibe/core/` | `App` (window, frame loop, fixed 40 Hz step), `Game`, `Scene`, `HostConfig`, `Log`, the ImGui dev overlay |
-| `lib/vibe/render/` | `Renderer` (SDL_Renderer: rects, circles, sprites, nine-slice, gradients, debug text), `Camera`, `Texture`, `Text` (SDL3_ttf) |
+| `lib/vibe/sdl/` | The SDL backend: the SDL main callbacks (they ask your game for a `vibe::Game` through `vibe::createGame()`), `App` (frame loop, fixed 40 Hz step), the ImGui dev overlay, and the conversion from SDL events to `vibe::InputEvent`. The only engine headers that name SDL types live here. |
+| `lib/vibe/core/` | `Game`, `Scene`, `Input` (events, keys, gamepads), `HostConfig`, `Log`, `Time` |
+| `lib/vibe/render/` | `Renderer` (owns the window; SDL_Renderer: rects, circles, sprites, nine-slice, gradients, debug text), `Camera`, `Texture`, `Text` (SDL3_ttf) |
 | `lib/vibe/math/` | `Vec3`, `Vec4`, `Quat`, `Mat4`, `Transform`: the 3D math every part of the engine shares |
 | `lib/vibe/node/` | `Node` (a tree of nodes, the Composite pattern), `NodeScene`, `SpriteNode` |
 | `lib/vibe/audio/` | Music streamed from Ogg Vorbis and sound effects, by cue names you list |
@@ -85,7 +85,7 @@ const vibe::net::Protocol& protocol() {
     static const vibe::net::Protocol instance = [] {
         vibe::net::Protocol p;
         p.command<Moved>("moved", [](const Json& data, Moved& out) {
-            const Json* x = field(data, "x");
+            const Json x = field(data, "x");
             return x && readFloat(*x, out.x) ? DecodeResult::ok() : DecodeResult::malformed("moved: bad x");
         });
         p.command("chat", decodeChat);  // DecodeResult(const Json&, InboundMessage&)
@@ -110,7 +110,7 @@ const vibe::net::Protocol& protocol() {
 | `http(step, name, decode)` | The answer to a `Session::request` with this step; `name` is for log lines. Steps start at `vibe::net::gameHttpStep(0)` |
 | `stream<T>(merge)` | High-rate messages (positions) where only the newest counts: the inbound queue merges a newer one into the queued one when `merge` returns true |
 
-A command with no decoder arrives as `OtherAppCommand`. `vibe/net/DecodeSupport.h` has the JSON readers the engine's own decoders use (`readInt32`, `readName`, `field`, `drop`, `failure`, ...).
+A command with no decoder arrives as `OtherAppCommand`. `vibe::net::Json` is the engine's read-only view of a parsed JSON value (`is_object()`, `size()`, `[i]`, `member(key)`, `get<double>()`, range-for); a missing member is an empty view that tests false. The JSON library behind it stays inside `Json.cpp`. `vibe/net/DecodeSupport.h` has the readers the engine's own decoders use (`readInt32`, `readName`, `field`, `drop`, `failure`, ...).
 
 **Handlers on `session.messages()`** receive the decoded messages by type: app commands once the session is ready, `SessionError` for an APP_REQUEST_ERROR, and every HTTP answer (`HttpGameServerList`, your HTTP structs, `HttpFailed` with its step). Each object subscribes to what it handles and keeps the returned `Subscription`; destroying it, or the `vibe::net::Subscriptions` list holding it, ends the subscription. Subscribing and unsubscribing from inside a handler is safe.
 
@@ -161,6 +161,24 @@ session.inFlight<ScoreRequest>();
 | `body()`, `firstPage` | `request`, optional | A JSON body; `firstPage` is handed to the decoder in `HttpAnswer` |
 
 `Session::sendApp(command, json)`, `sendFrame(frame)` and `requestApi(step, method, path, body)` stay for a frame that does not fit a struct (a batch of inputs split over several frames).
+
+## Input
+
+Scenes, nodes and widgets get a `vibe::InputEvent`, never an SDL event, so the platform layer can change without touching game code.
+
+| Field | Set for |
+|---|---|
+| `type` | `EventType::KeyDown`, `MouseButtonDown`, `FingerMotion`, `MouseWheel`, `TextInput`, `WindowHidden`, `Terminating`, `GamepadButtonDown`, ... |
+| `key`, `physicalKey`, `repeat`, `mods` | Keys: `key` follows the keyboard layout, `physicalKey` is the key's place on a US layout (use it for WASD) |
+| `button`, `x`, `y`, `leftHeld` | Mouse; `x`, `y` are window coordinates until `renderer.toCanvasCoordinates(event)` turns them into canvas pixels |
+| `wheelX`, `wheelY` | Mouse wheel, with the pointer in `x`, `y` |
+| `fingerId`, `x`, `y` | Touch; `x`, `y` are 0 to 1 until `toCanvasCoordinates` |
+| `text` | Typed text, valid during the call only |
+| `deviceId`, `gamepadButton` | Gamepads (and the keyboard id of a key, 0 for a posted key) |
+
+`vibe::input` reads what is held now: `keyHeld(Key::W)`, `gamepadOpen(slot)`, `gamepadAxis(slot, GamepadAxis::LeftX)` (-1 to 1), `gamepadButtonHeld(slot, GamepadButton::South)`, `textInputActive()`. The engine opens up to `input::kMaxGamepads` gamepads as they connect and closes them when they go.
+
+`Game::update()` returns `vibe::AppResult::Continue`, `Success` (stop cleanly) or `Failure`. `vibe::logInfo`, `logWarn`, `logError`, `logDebug` (printf style) and `vibe::ticksMs()`, `ticksNs()` cover logging and time.
 
 ## Scenes and the frame
 

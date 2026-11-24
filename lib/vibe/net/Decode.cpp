@@ -19,7 +19,7 @@ namespace vibe::net {
 // the type first and indexes only within checked bounds.
 
 Json parseJson(std::string_view text) {
-    return Json::parse(text.begin(), text.end(), nullptr, /*allow_exceptions=*/false);
+    return Json::parse(text);
 }
 
 bool readInt64(const Json& value, std::int64_t& out) {
@@ -71,9 +71,8 @@ bool hasControlChar(const std::string& text) {
     return false;
 }
 
-const Json* field(const Json& object, const char* key) {
-    const auto it = object.find(key);
-    return it == object.end() ? nullptr : &*it;
+Json field(const Json& object, const char* key) {
+    return object.member(key);
 }
 
 // A message is about 5 KB (RoomPlayers), and the wasm stack is 64 KB, so the
@@ -147,7 +146,7 @@ HttpFailed statusFailure(HttpStep step, int status, std::string_view body, doubl
 
 // A token goes into a JSON string and a request header, so it must be
 // printable ASCII with no quote or backslash.
-bool readToken(const Json* value, std::string& out) {
+bool readToken(const Json& value, std::string& out) {
     if (!value || !value->is_string()) {
         return false;
     }
@@ -166,7 +165,7 @@ bool readToken(const Json* value, std::string& out) {
 
 // A server string for a text field: no control characters, at most `max`
 // bytes. Null or absent gives "".
-bool readOptionalText(const Json* value, std::size_t max, std::string& out) {
+bool readOptionalText(const Json& value, std::size_t max, std::string& out) {
     out.clear();
     if (!value || value->is_null()) {
         return true;
@@ -199,14 +198,14 @@ bool parseObjectBody(HttpStep step, int status, std::string_view body, double el
 
 // A string field shown as text, sanitized; "" when absent or not a string.
 std::string shownText(const Json& object, const char* key, std::size_t maxBytes) {
-    const Json* value = field(object, key);
+    const Json value = field(object, key);
     return value && value->is_string() ? sanitizeShownText(value->get_ref<const std::string&>(), maxBytes) : "";
 }
 
 // `pageToken.next`, `continuation.hasNext` and `total`.
 void readPage(const Json& json, PageInfo& page) {
-    if (const Json* token = field(json, "pageToken"); token && token->is_object()) {
-        const Json* next = field(*token, "next");
+    if (const Json token = field(json, "pageToken"); token && token->is_object()) {
+        const Json next = field(*token, "next");
         if (next && next->is_string()) {
             const auto& text = next->get_ref<const std::string&>();
             // Base64 from the server; anything else would need escaping.
@@ -220,11 +219,11 @@ void readPage(const Json& json, PageInfo& page) {
             }
         }
     }
-    if (const Json* cont = field(json, "continuation"); cont && cont->is_object()) {
-        const Json* hasNext = field(*cont, "hasNext");
+    if (const Json cont = field(json, "continuation"); cont && cont->is_object()) {
+        const Json hasNext = field(*cont, "hasNext");
         page.hasNext = hasNext && hasNext->is_boolean() && hasNext->get<bool>() && !page.nextPageToken.empty();
     }
-    if (const Json* total = field(json, "total")) {
+    if (const Json total = field(json, "total")) {
         if (!readInt64(*total, page.total) || page.total < 0) {
             page.total = 0;
         }
@@ -423,7 +422,7 @@ InboundMessage decodeLoginResponse(int status, std::string_view body, double ela
     if (json.is_discarded() || !json.is_object()) {
         return failure(step, status, elapsedMs, "login answer is not a JSON object");
     }
-    const Json* tokenStatus = field(json, "accessTokenStatus");
+    const Json tokenStatus = field(json, "accessTokenStatus");
     if (!tokenStatus || !tokenStatus->is_string() || tokenStatus->get_ref<const std::string&>() != "ACTIVATED") {
         // Unity opens the register-success page with this token (plan 11).
         HttpLoginNotActivated notActivated;
@@ -441,7 +440,7 @@ InboundMessage decodeLoginResponse(int status, std::string_view body, double ela
         return failure(step, status, elapsedMs, "login answer has no usable accessToken");
     }
     // socketAccessToken falls back to accessToken when null (research/protocol.md).
-    const Json* socketToken = field(json, "socketAccessToken");
+    const Json socketToken = field(json, "socketAccessToken");
     if (!socketToken || socketToken->is_null()) {
         ok.socketAccessToken = ok.accessToken;
     } else if (!readToken(socketToken, ok.socketAccessToken)) {
@@ -460,7 +459,7 @@ InboundMessage decodeGameServerListResponse(int status, std::string_view body, d
     if (!parseObjectBody(step, status, body, elapsedMs, "game server list", json, failed)) {
         return failed;
     }
-    const Json* items = field(json, "items");
+    const Json items = field(json, "items");
     if (!items || !items->is_array()) {
         return failure(step, status, elapsedMs, "game server list has no items array");
     }
@@ -474,7 +473,7 @@ InboundMessage decodeGameServerListResponse(int status, std::string_view body, d
             return failure(step, status, elapsedMs, "game server item is not an object");
         }
         HttpGameServerList::Server server;
-        const Json* id = field(item, "id");
+        const Json id = field(item, "id");
         if (!id || !readInt64(*id, server.id) || server.id <= 0) {
             return failure(step, status, elapsedMs, "game server item has a bad id");
         }
@@ -499,7 +498,7 @@ InboundMessage decodeServerInstancesResponse(int status, std::string_view body, 
     if (!parseObjectBody(step, status, body, elapsedMs, "instance list", json, failed)) {
         return failed;
     }
-    const Json* items = field(json, "items");
+    const Json items = field(json, "items");
     if (!items || !items->is_array()) {
         return failure(step, status, elapsedMs, "instance list has no items array");
     }
@@ -511,7 +510,7 @@ InboundMessage decodeServerInstancesResponse(int status, std::string_view body, 
         return failure(step, status, elapsedMs, "instance item is not an object");
     }
     HttpServerInstance instance;
-    const Json* id = field(item, "id");
+    const Json id = field(item, "id");
     if (!id || !readInt64(*id, instance.instanceId)) {
         return failure(step, status, elapsedMs, "instance item has a bad id");
     }
@@ -528,13 +527,13 @@ InboundMessage decodeServerInstancesResponse(int status, std::string_view body, 
             return failure(step, status, elapsedMs, "instance websocketURL is not a ws:// or wss:// URL");
         }
     }
-    const Json* tcpPort = field(item, "tcpPort");
+    const Json tcpPort = field(item, "tcpPort");
     std::int64_t port = 0;
     if (tcpPort && !tcpPort->is_null() && !readInt64(*tcpPort, port)) {
         return failure(step, status, elapsedMs, "instance tcpPort is not a number");
     }
     instance.instanceTcpUrl = instanceTcpUrl(instance.host, port);
-    const Json* udpPort = field(item, "udpPort");
+    const Json udpPort = field(item, "udpPort");
     std::int64_t udp = 0;
     if (udpPort && !udpPort->is_null() && !readInt64(*udpPort, udp)) {
         return failure(step, status, elapsedMs, "instance udpPort is not a number");

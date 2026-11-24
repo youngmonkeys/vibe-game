@@ -2,7 +2,6 @@
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
-#include <SDL3/SDL_video.h>
 
 #include <cstdint>
 #include <memory>
@@ -14,7 +13,7 @@
 #include "vibe/render/Renderer.h"
 
 #ifdef VIBE_DEV
-#include "vibe/core/debug/DebugOverlay.h"
+#include "vibe/sdl/debug/DebugOverlay.h"
 #endif
 
 namespace vibe {
@@ -32,7 +31,6 @@ private:
     void resetLoopStats(std::uint64_t nowNs);
     void recordLoopStats(std::uint64_t nowNs, int steps);
 
-    SDL_Window* window_ = nullptr;
     Renderer renderer_;
     std::unique_ptr<Game> game_;
     std::unique_ptr<Scene> scene_;

@@ -96,9 +96,9 @@ vibe-game/
 │   └── toolchains/         mingw-w64-x86_64.cmake
 ├── lib/
 │   └── vibe/               the engine, namespace vibe, included as "vibe/..."
-│       ├── main.cpp        SDL main callbacks only; asks the game for vibe::createGame()
-│       ├── core/           App (window, loop, fixed step), Game, Scene, HostConfig, Log, AppInfo, debug/ (ImGui)
-│       ├── render/         Renderer (SDL_Renderer), Camera, Texture, Text (SDL3_ttf); SDL_GPU later
+│       ├── sdl/            the SDL backend: main.cpp (SDL main callbacks), App (loop, fixed step), Sdl.h, Input.cpp, debug/ (ImGui)
+│       ├── core/           Game, Scene, Input (InputEvent, keys, gamepads), HostConfig, Log, Time, AppInfo
+│       ├── render/         Renderer (window, SDL_Renderer), Camera, Texture, Text (SDL3_ttf); SDL_GPU later
 │       ├── math/           Vec3, Vec4, Quat, Mat4, Transform; the world is 3D, a 2D game keeps z at 0
 │       ├── node/           Node (a tree of nodes, the Composite pattern), NodeScene, SpriteNode
 │       ├── physics/        (planned) Jolt / Box2D wrappers
@@ -106,7 +106,7 @@ vibe-game/
 │       ├── assets/         (planned) asset loading via SDL_IOStream (manifest, atlases, glTF, KTX2)
 │       ├── platform/       ALL platform-specific code: device, fullscreen, paste, touch text, prefs, token store; web/, desktop/
 │       ├── ui/             immediate-mode widgets; dev/ (dev builds only)
-│       └── net/            ezylogin, game master, EzyFox session, decoders; transport/{web,tcp,apple,android,windows,linux}
+│       └── net/            ezylogin, game master, EzyFox session, decoders, Json (read-only view); transport/{web,tcp,apple,android,windows,linux}
 ├── platform/               default templates and engine platform files
 │   ├── android/            AndroidManifest.xml.in, engine Java (VibeActivity, VibeHttp, VibeCrypto); APK built without Gradle
 │   ├── ios/                Info.plist.in; (planned) LaunchScreen.storyboard, icons
@@ -150,12 +150,13 @@ The engine is not copied into a game. A game points `VIBE_GAME_DIR` at this repo
 
 | Point | Engine | Game |
 |---|---|---|
-| Entry | `lib/vibe/main.cpp`, `vibe::App` | `std::unique_ptr<vibe::Game> vibe::createGame()` |
+| Entry | `lib/vibe/sdl/main.cpp`, `vibe::App` | `std::unique_ptr<vibe::Game> vibe::createGame()` |
 | Scenes | `vibe::Game::createInitialScene(const GameContext&)`, optional `audioCues`, `clearColor`, `onStart`, `update`, `flush`, `onQuit` | its own `vibe::Scene` subclasses |
 | Identity | `VIBE_APP_NAME`, `VIBE_APP_ORG`, `VIBE_APP_ID` (window title, log tag, prefs path, session key, user agent) | `vibe_add_game(<target> NAME ORG ID BUNDLE_ID ...)` |
-| Dev-only code | `lib/vibe/core/debug/`, `lib/vibe/ui/dev/`, `VIBE_DEV` | `DEV_DIRS` folders under `src/`, extra web exports in `WEB_DEV_EXPORTS` |
+| Dev-only code | `lib/vibe/sdl/debug/`, `lib/vibe/ui/dev/`, `VIBE_DEV` | `DEV_DIRS` folders under `src/`, extra web exports in `WEB_DEV_EXPORTS` |
 | Network messages | core messages + the game's lists joined into one flat `vibe::net::InboundMessage` variant; `vibe::net::Protocol` maps app command names and HTTP steps to decoders; `Session::messages()` delivers each message to the handlers subscribed to its type | `net/GameProtocol.h` with the message lists, a `Protocol` passed to every `Session`, handlers on `session.messages()` |
 | Requests | `Session::send(request)` for app commands, `Session::request(request)` and `inFlight<Request>()` for HTTP steps from `vibe::net::gameHttpStep(0)` up | one struct per request: `kCommand` and `encode`, or `kStep`, `kMethod`, `kPath` or `path()`, `body()`, `firstPage` |
+| Input | `vibe::InputEvent` to `Scene::onEvent`, `Node::onEvent` and the widgets; `vibe::input::keyHeld`, gamepad slots | reads `InputEvent` and `vibe::input`, never `SDL_Event` |
 | Platform files | `platform/` defaults with `@VIBE_APP_NAME@` placeholders | overrides in its own `platform/` |
 
 Folders marked (planned) do not exist yet; add them at that path when the engine needs them, so every game finds them in the same place.
@@ -166,6 +167,7 @@ Rules:
 - Game code in its own namespace reaches the engine through `vibe::`. A forward declaration of an engine type must be in `namespace vibe`, not in the game's namespace.
 - The project must configure and build when `consoles/` is missing: guard it with `if(EXISTS ${CMAKE_SOURCE_DIR}/consoles/CMakeLists.txt)`.
 - Gameplay code must not include SDL GPU headers directly; it goes through `vibe/render/`.
+- Engine headers outside `lib/vibe/sdl/` and `lib/vibe/net/transport/` name no third-party type (SDL, SDL_ttf, nlohmann/json, stb_vorbis, Dear ImGui). Those libraries stay in `.cpp` files, behind engine types (`InputEvent`, `AppResult`, `Renderer::Backend`, `net::Json`, `audio::MusicStream`), so one can be replaced without touching game code.
 
 ---
 

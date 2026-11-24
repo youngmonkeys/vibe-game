@@ -1,15 +1,11 @@
 #pragma once
 
-#include <SDL3/SDL_video.h>
-
 #include <cstdint>
+#include <memory>
 
+#include "vibe/core/Input.h"
 #include "vibe/render/Camera.h"
 #include "vibe/render/Texture.h"
-
-struct SDL_Renderer;
-struct SDL_Surface;
-union SDL_Event;
 
 namespace vibe {
 
@@ -57,16 +53,18 @@ struct MinimapDot {
 // beginFrame, draw calls, endFrame; draw calls outside a frame do nothing.
 class Renderer {
 public:
-    // Call after SDL_Init and before SDL_CreateWindow, and add the returned
-    // flags to the window. Asks for an OpenGL ES 3.0 context, which Emscripten
-    // creates as WebGL 2, the only version this build links. Without it SDL's
-    // GLES2 renderer asks for ES 2.0 (WebGL 1) and Emscripten logs an error.
-    static SDL_WindowFlags prepareWindow();
+    struct Backend;
 
-    // Creates the renderer with vsync on, which SDL's Emscripten backend turns
-    // into requestAnimationFrame timing. Vsync off would switch the main loop
-    // to setTimeout. Logs SDL_GetError() and returns false on failure.
-    bool create(SDL_Window* window);
+    Renderer();
+    ~Renderer();
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
+
+    // Creates the window and the renderer with vsync on, which SDL's
+    // Emscripten backend turns into requestAnimationFrame timing. Vsync off
+    // would switch the main loop to setTimeout. Logs SDL_GetError() and
+    // returns false on failure.
+    bool create(const char* title, int width, int height);
     void destroy();
 
     // Reads the canvas size and clears it. Returns false, and draws nothing,
@@ -75,18 +73,11 @@ public:
     // Presents the frame started by a successful beginFrame.
     void endFrame();
 
-#ifdef VIBE_DEV
-    // For the dev overlay's ImGui SDL_Renderer backend only (plan 07,
-    // src/app/debug/). Nothing else draws around this class.
-    SDL_Renderer* sdlRenderer() const { return renderer_; }
-#endif
-
-    // The page's one window, for SDL text input (plan 11's text fields).
-    SDL_Window* window() const { return window_; }
+    Backend& backend() const { return *backend_; }
     // Mouse and touch events carry CSS pixels; drawing uses canvas pixels.
-    // Converts the event's coordinates in place (SDL_ConvertEventToRender-
-    // Coordinates). Plan 11's widgets hit-test in canvas pixels.
-    void toCanvasCoordinates(SDL_Event& event) const;
+    // Converts the event's coordinates in place. Plan 11's widgets hit-test
+    // in canvas pixels.
+    void toCanvasCoordinates(InputEvent& event) const;
 
     void setCamera(const Camera& camera) { camera_ = camera; }
     const Camera& camera() const { return camera_; }
@@ -192,10 +183,9 @@ private:
     friend class TextCache;
     void fillScreenRect(float x, float y, float w, float h);
     // Uploads `surface` (not freed). Invalid on failure.
-    Texture createTextureFromSurface(SDL_Surface* surface, TextureFilter filter = TextureFilter::Linear);
+    Texture createTextureFromSurface(void* surface, TextureFilter filter = TextureFilter::Linear);
 
-    SDL_Window* window_ = nullptr;
-    SDL_Renderer* renderer_ = nullptr;
+    std::unique_ptr<Backend> backend_;
     Camera camera_;
     Viewport viewport_;
     bool inFrame_ = false;

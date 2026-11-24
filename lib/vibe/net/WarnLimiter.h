@@ -1,9 +1,9 @@
 #pragma once
 
-#include <SDL3/SDL_log.h>
-#include <SDL3/SDL_timer.h>
-
 #include <cstdint>
+
+#include "vibe/core/Log.h"
+#include "vibe/core/Time.h"
 
 namespace vibe::net {
 
@@ -15,16 +15,15 @@ public:
 
     // `what` and `reason` are static text that never quotes a payload.
     void warn(const char* what, const char* reason) {
-        const std::uint64_t now = SDL_GetTicks();
+        const std::uint64_t now = ticksMs();
         if (lastMs_ != 0 && now - lastMs_ < kIntervalMs) {
             ++suppressed_;
             return;
         }
         if (suppressed_ > 0) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "net: dropped %s: %s (%d more dropped since the last warning)",
-                        what, reason, suppressed_);
+            logWarn("net: dropped %s: %s (%d more dropped since the last warning)", what, reason, suppressed_);
         } else {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "net: dropped %s: %s", what, reason);
+            logWarn("net: dropped %s: %s", what, reason);
         }
         lastMs_ = now == 0 ? 1 : now;
         suppressed_ = 0;

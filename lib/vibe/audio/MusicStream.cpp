@@ -1,12 +1,18 @@
 #include "vibe/audio/MusicStream.h"
 
+#include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_stdinc.h>
 
 #include <climits>
+#include <vector>
 
-#include "vibe/audio/StbVorbis.h"
+#define STB_VORBIS_NO_STDIO
+#define STB_VORBIS_NO_PUSHDATA_API
+#define STB_VORBIS_HEADER_ONLY
+#include <stb_vorbis.h>
+#undef STB_VORBIS_HEADER_ONLY
 
 namespace vibe::audio {
 namespace {
@@ -16,11 +22,51 @@ constexpr int kChunkFrames = 1024;
 
 } // namespace
 
-MusicStream::~MusicStream() {
+class MusicStream::Impl {
+public:
+    Impl() = default;
+    Impl(const Impl&) = delete;
+    Impl& operator=(const Impl&) = delete;
+    ~Impl();
+
+    bool open(const char* path, const SDL_AudioSpec& device, float gain);
+    void close();
+    bool isOpen() const { return vorbis_ != nullptr; }
+    SDL_AudioStream* stream() const { return stream_; }
+    void start();
+    void stop();
+    bool playing() const { return playing_; }
+#ifdef VIBE_DEV
+    void seekBeforeEnd(float seconds);
+#endif
+    float decodedSeconds() const;
+    unsigned loops() const { return loops_; }
+    float queuedSeconds() const;
+    std::size_t compressedBytes() const { return fileSize_; }
+
+private:
+    static void SDLCALL onNeedData(void* userdata, SDL_AudioStream* stream, int additional, int total);
+    void topUp();
+
+    void* file_ = nullptr;
+    std::size_t fileSize_ = 0;
+    stb_vorbis* vorbis_ = nullptr;
+    SDL_AudioStream* stream_ = nullptr;
+    int channels_ = 0;
+    int sampleRate_ = 0;
+    unsigned totalSamples_ = 0;
+    int targetBytes_ = 0;
+    std::vector<float> chunk_;
+    bool playing_ = false;
+    unsigned loops_ = 0;
+    bool warnedDecode_ = false;
+};
+
+MusicStream::Impl::~Impl() {
     close();
 }
 
-bool MusicStream::open(const char* path, const SDL_AudioSpec& device, float gain) {
+bool MusicStream::Impl::open(const char* path, const SDL_AudioSpec& device, float gain) {
     close();
     file_ = SDL_LoadFile(path, &fileSize_);
     if (!file_) {
@@ -76,7 +122,7 @@ bool MusicStream::open(const char* path, const SDL_AudioSpec& device, float gain
     return true;
 }
 
-void MusicStream::close() {
+void MusicStream::Impl::close() {
     playing_ = false;
     if (stream_) {
         SDL_DestroyAudioStream(stream_);
@@ -95,7 +141,7 @@ void MusicStream::close() {
     chunk_.shrink_to_fit();
 }
 
-void MusicStream::start() {
+void MusicStream::Impl::start() {
     if (!vorbis_) {
         return;
     }
@@ -105,7 +151,7 @@ void MusicStream::start() {
     topUp();
 }
 
-void MusicStream::stop() {
+void MusicStream::Impl::stop() {
     playing_ = false;
     if (stream_) {
         SDL_ClearAudioStream(stream_);
@@ -113,7 +159,7 @@ void MusicStream::stop() {
 }
 
 #ifdef VIBE_DEV
-void MusicStream::seekBeforeEnd(float seconds) {
+void MusicStream::Impl::seekBeforeEnd(float seconds) {
     if (!vorbis_ || !playing_) {
         return;
     }
@@ -127,14 +173,14 @@ void MusicStream::seekBeforeEnd(float seconds) {
 }
 #endif
 
-float MusicStream::decodedSeconds() const {
+float MusicStream::Impl::decodedSeconds() const {
     if (!vorbis_) {
         return 0.0f;
     }
     return static_cast<float>(stb_vorbis_get_playback_sample_offset(vorbis_)) / static_cast<float>(sampleRate_);
 }
 
-float MusicStream::queuedSeconds() const {
+float MusicStream::Impl::queuedSeconds() const {
     if (!stream_) {
         return 0.0f;
     }
@@ -145,12 +191,12 @@ float MusicStream::queuedSeconds() const {
 
 // SDL calls this when the device pulls from the stream. On Emscripten that
 // is the ScriptProcessorNode callback, on the main thread (decision D15).
-void SDLCALL MusicStream::onNeedData(void* userdata, SDL_AudioStream* /*stream*/, int /*additional*/,
+void SDLCALL MusicStream::Impl::onNeedData(void* userdata, SDL_AudioStream* /*stream*/, int /*additional*/,
                                      int /*total*/) {
-    static_cast<MusicStream*>(userdata)->topUp();
+    static_cast<Impl*>(userdata)->topUp();
 }
 
-void MusicStream::topUp() {
+void MusicStream::Impl::topUp() {
     if (!playing_ || !vorbis_) {
         return;
     }
@@ -183,6 +229,60 @@ void MusicStream::topUp() {
             return;
         }
     }
+}
+
+MusicStream::MusicStream() : impl_(std::make_unique<Impl>()) {}
+
+MusicStream::~MusicStream() = default;
+
+bool MusicStream::open(const char* path, std::uint32_t device, float gain) {
+    SDL_AudioSpec spec{};
+    if (!SDL_GetAudioDeviceFormat(device, &spec, nullptr)) {
+        return false;
+    }
+    return impl_->open(path, spec, gain) && SDL_BindAudioStream(device, impl_->stream());
+}
+
+void MusicStream::close() {
+    impl_->close();
+}
+
+bool MusicStream::isOpen() const {
+    return impl_->isOpen();
+}
+
+void MusicStream::start() {
+    impl_->start();
+}
+
+void MusicStream::stop() {
+    impl_->stop();
+}
+
+bool MusicStream::playing() const {
+    return impl_->playing();
+}
+
+#ifdef VIBE_DEV
+void MusicStream::seekBeforeEnd(float seconds) {
+    impl_->seekBeforeEnd(seconds);
+}
+#endif
+
+float MusicStream::decodedSeconds() const {
+    return impl_->decodedSeconds();
+}
+
+unsigned MusicStream::loops() const {
+    return impl_->loops();
+}
+
+float MusicStream::queuedSeconds() const {
+    return impl_->queuedSeconds();
+}
+
+std::size_t MusicStream::compressedBytes() const {
+    return impl_->compressedBytes();
 }
 
 } // namespace vibe::audio

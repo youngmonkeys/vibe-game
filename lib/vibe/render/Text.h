@@ -1,14 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "vibe/render/Renderer.h"
 #include "vibe/render/Texture.h"
-
-typedef struct TTF_Font TTF_Font;
 
 namespace vibe {
 
@@ -35,7 +34,7 @@ public:
     // Kept even when used every frame; past this the least recently used go.
     static constexpr std::size_t kMaxEntries = 512;
 
-    explicit TextCache(Renderer& renderer) : renderer_(renderer) {}
+    explicit TextCache(Renderer& renderer);
     ~TextCache();
     TextCache(const TextCache&) = delete;
     TextCache& operator=(const TextCache&) = delete;
@@ -53,7 +52,7 @@ public:
     // pixel as one canvas pixel (capitals 7/11 of the size).
     static constexpr float kPixelSizePerGrid = 11.0f;
     void shutdown();
-    bool ready() const { return body_ || title_; }
+    bool ready() const;
 
     // Size of `text` at `sizePx`, rendering it into the cache if needed.
     // `wrapPx` above 0 wraps at that width (SDL_ttf breaks at spaces), left
@@ -88,15 +87,14 @@ private:
         TextSize size;
         std::uint64_t lastUsed = 0;
     };
-    TTF_Font* fontFor(FontFace face, int sizePx);
+    struct Fonts;
+    void* fontFor(FontFace face, int sizePx);
     // Canvas pixels per rendered pixel: 1, or the pixel font's scale.
     float scaleFor(int sizePx) const;
     const Entry* find(FontFace face, int sizePx, std::string_view text, int wrapPx);
 
     Renderer& renderer_;
-    TTF_Font* body_ = nullptr;
-    TTF_Font* title_ = nullptr;
-    TTF_Font* fallback_ = nullptr;
+    std::unique_ptr<Fonts> fonts_;
     int pixelGrid_ = 0;
     bool ttfStarted_ = false;
     std::vector<Entry> entries_;

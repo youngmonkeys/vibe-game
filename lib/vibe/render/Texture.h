@@ -2,8 +2,6 @@
 
 #include <cstdint>
 
-struct SDL_Texture;
-
 namespace vibe {
 
 // A GPU texture owned by the renderer's backend. Move-only. Create it with
@@ -25,10 +23,10 @@ public:
 
 private:
     friend class Renderer;
-    Texture(SDL_Texture* texture, int width, int height) : texture_(texture), width_(width), height_(height) {}
+    Texture(void* texture, int width, int height) : texture_(texture), width_(width), height_(height) {}
     void reset();
 
-    SDL_Texture* texture_ = nullptr;
+    void* texture_ = nullptr;
     int width_ = 0;
     int height_ = 0;
 };

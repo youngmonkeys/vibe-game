@@ -1,5 +1,4 @@
 add_executable(node-tests node_tests.cpp "${VIBE_LIB_DIR}/vibe/node/Node.cpp")
 vibe_project_target(node-tests)
 target_include_directories(node-tests PRIVATE "${VIBE_LIB_DIR}")
-target_link_libraries(node-tests PRIVATE SDL3::Headers)
 vibe_node_test(node-tests)

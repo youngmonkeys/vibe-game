@@ -14,6 +14,7 @@
 #include "vibe/platform/Fullscreen.h"
 #include "vibe/platform/Paste.h"
 #include "vibe/platform/TouchText.h"
+#include "vibe/sdl/Sdl.h"
 #ifdef VIBE_DEV
 #include "vibe/ui/dev/DevHooks.h"
 #endif
@@ -47,7 +48,7 @@ void Ui::beginFrame() {
     height_ = static_cast<float>(viewport.heightPx);
     int cssWidth = 0;
     int cssHeight = 0;
-    if (renderer_.window() && SDL_GetWindowSize(renderer_.window(), &cssWidth, &cssHeight) && cssWidth > 0) {
+    if (sdl::window(renderer_) && SDL_GetWindowSize(sdl::window(renderer_), &cssWidth, &cssHeight) && cssWidth > 0) {
         pixelRatio_ = width_ / static_cast<float>(cssWidth);
     }
     // Plan 14: lay out inside the safe area. At most a third of the canvas
@@ -235,7 +236,7 @@ void Ui::focus(TextField* field) {
         return;
     }
     focused_ = field;
-    SDL_Window* window = renderer_.window();
+    SDL_Window* window = sdl::window(renderer_);
     if (!window) {
         return;
     }
@@ -331,7 +332,7 @@ void Ui::takeTouchText() {
         SDL_Event enter{};
         enter.type = SDL_EVENT_KEY_DOWN;
         enter.key.timestamp = SDL_GetTicksNS();
-        enter.key.windowID = renderer_.window() ? SDL_GetWindowID(renderer_.window()) : 0;
+        enter.key.windowID = sdl::window(renderer_) ? SDL_GetWindowID(sdl::window(renderer_)) : 0;
         enter.key.scancode = SDL_SCANCODE_RETURN;
         enter.key.key = SDLK_RETURN;
         enter.key.down = true;
@@ -353,21 +354,21 @@ void Ui::mark([[maybe_unused]] const char* id, [[maybe_unused]] const ScreenRect
 
 // ---- Button -----------------------------------------------------------------
 
-bool Button::onEvent(const SDL_Event& event) {
+bool Button::onEvent(const InputEvent& event) {
     switch (event.type) {
-    case SDL_EVENT_MOUSE_MOTION:
-        hover_ = rect_.contains(event.motion.x, event.motion.y);
+    case EventType::MouseMotion:
+        hover_ = rect_.contains(event.x, event.y);
         return false;
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (event.button.button == SDL_BUTTON_LEFT) {
-            pressed_ = enabled_ && rect_.contains(event.button.x, event.button.y);
+    case EventType::MouseButtonDown:
+        if (event.button == MouseButton::Left) {
+            pressed_ = enabled_ && rect_.contains(event.x, event.y);
         }
         return false;
-    case SDL_EVENT_MOUSE_BUTTON_UP: {
-        if (event.button.button != SDL_BUTTON_LEFT) {
+    case EventType::MouseButtonUp: {
+        if (event.button != MouseButton::Left) {
             return false;
         }
-        const bool clicked = pressed_ && enabled_ && rect_.contains(event.button.x, event.button.y);
+        const bool clicked = pressed_ && enabled_ && rect_.contains(event.x, event.y);
         pressed_ = false;
         return clicked;
     }
@@ -441,39 +442,39 @@ void Button::draw(Ui& ui, const ScreenRect& rect, ButtonStyle style, float textU
 
 // ---- TextField --------------------------------------------------------------
 
-TextField::Result TextField::onEvent(Ui& ui, const SDL_Event& event) {
+TextField::Result TextField::onEvent(Ui& ui, const InputEvent& event) {
     const bool focused = ui.focused() == this;
     switch (event.type) {
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (event.button.button == SDL_BUTTON_LEFT) {
-            if (rect_.contains(event.button.x, event.button.y)) {
+    case EventType::MouseButtonDown:
+        if (event.button == MouseButton::Left) {
+            if (rect_.contains(event.x, event.y)) {
                 ui.focus(this);
             } else if (focused) {
                 ui.focus(nullptr);
             }
         }
         return Result::None;
-    case SDL_EVENT_TEXT_INPUT:
-        if (focused && event.text.text) {
-            insert(event.text.text);
+    case EventType::TextInput:
+        if (focused && event.text) {
+            insert(event.text);
         }
         return Result::None;
-    case SDL_EVENT_KEY_DOWN:
+    case EventType::KeyDown:
         if (!focused) {
             return Result::None;
         }
-        switch (event.key.key) {
-        case SDLK_BACKSPACE:
+        switch (event.key) {
+        case Key::Backspace:
             if (!text_.empty()) {
                 const std::size_t n = lastCharBytes(text_);
                 std::fill(text_.end() - static_cast<std::ptrdiff_t>(n), text_.end(), '\0');
                 text_.resize(text_.size() - n);
             }
             return Result::None;
-        case SDLK_RETURN:
-        case SDLK_KP_ENTER:
-            return event.key.repeat ? Result::None : Result::Submit;
-        case SDLK_TAB:
+        case Key::Return:
+        case Key::KeypadEnter:
+            return event.repeat ? Result::None : Result::Submit;
+        case Key::Tab:
             return Result::Next;
         default:
             return Result::None;

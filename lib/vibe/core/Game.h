@@ -1,7 +1,5 @@
 #pragma once
 
-#include <SDL3/SDL_init.h>
-
 #include <memory>
 
 #include "vibe/core/HostConfig.h"
@@ -10,6 +8,8 @@
 #include "vibe/render/Renderer.h"
 
 namespace vibe {
+
+enum class AppResult { Continue, Success, Failure };
 
 struct GameContext {
     Renderer& renderer;
@@ -28,7 +28,7 @@ public:
     virtual audio::CueConfig audioCues() const { return {}; }
     virtual std::unique_ptr<Scene> createInitialScene(const GameContext& context) = 0;
     virtual void onStart(const GameContext& /*context*/) {}
-    virtual SDL_AppResult update() { return SDL_APP_CONTINUE; }
+    virtual AppResult update() { return AppResult::Continue; }
     virtual void flush() {}
     virtual void onQuit() {}
 };

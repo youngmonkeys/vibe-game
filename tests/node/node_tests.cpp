@@ -43,7 +43,7 @@ public:
 protected:
     void onEnterTree() override { journal.push_back("enter " + name()); }
     void onExitTree() override { journal.push_back("exit " + name()); }
-    bool onEvent(const SDL_Event& /*event*/) override {
+    bool onEvent(const vibe::InputEvent& /*event*/) override {
         journal.push_back("event " + name());
         return consumes_;
     }
@@ -126,7 +126,7 @@ void testEvents() {
     root.emplaceChild<Probe>("back");
     Probe& front = root.emplaceChild<Probe>("front", true);
     front.emplaceChild<Probe>("front.child");
-    SDL_Event event{};
+    vibe::InputEvent event{};
     CHECK(root.dispatchEvent(event));
     CHECK((journal == std::vector<std::string>{"event front.child", "event front"}));
     journal.clear();

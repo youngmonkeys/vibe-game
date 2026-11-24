@@ -11,4 +11,15 @@ namespace vibe {
 // Dev builds also turn on debug-level application logs.
 void installLogOutput();
 
+#if defined(__GNUC__) || defined(__clang__)
+#define VIBE_PRINTF_FORMAT(index) __attribute__((format(printf, index, index + 1)))
+#else
+#define VIBE_PRINTF_FORMAT(index)
+#endif
+
+void logDebug(const char* format, ...) VIBE_PRINTF_FORMAT(1);
+void logInfo(const char* format, ...) VIBE_PRINTF_FORMAT(1);
+void logWarn(const char* format, ...) VIBE_PRINTF_FORMAT(1);
+void logError(const char* format, ...) VIBE_PRINTF_FORMAT(1);
+
 } // namespace vibe

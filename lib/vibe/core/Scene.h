@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
+#include "vibe/core/Input.h"
 
 namespace vibe {
 
@@ -12,7 +12,7 @@ public:
 
     virtual void onEnter() {}
     virtual void onLeave() {}
-    virtual void onEvent(const SDL_Event& /*event*/) {}
+    virtual void onEvent(const InputEvent& /*event*/) {}
     // Once per frame before the fixed steps: drain the network (plan 07).
     virtual void frameStart() {}
     // One 40 Hz simulation step. No allocations here.

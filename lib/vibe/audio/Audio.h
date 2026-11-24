@@ -1,9 +1,9 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
-
 #include <string>
 #include <vector>
+
+#include "vibe/core/Input.h"
 
 namespace vibe::audio {
 
@@ -40,7 +40,7 @@ bool soundEffectsEnabled();
 // frame, and SDL_AppQuit. init reads the settings, opens the device paused,
 // and loads the effects; a failure logs and leaves the game silent.
 void init(const char* assetRoot, const CueConfig& cues);
-void onEvent(const SDL_Event& event);
+void onEvent(const InputEvent& event);
 void update();
 void shutdown();
 

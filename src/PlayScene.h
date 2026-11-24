@@ -1,10 +1,9 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
-
 #include <string>
 
 #include "vibe/core/HostConfig.h"
+#include "vibe/core/Input.h"
 #include "vibe/core/Scene.h"
 #include "vibe/net/Session.h"
 #include "vibe/render/Renderer.h"
@@ -15,7 +14,7 @@ class PlayScene final : public vibe::Scene, private vibe::net::SessionListener {
 public:
     PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config);
 
-    void onEvent(const SDL_Event& event) override;
+    void onEvent(const vibe::InputEvent& event) override;
     void frameStart() override;
     void fixedUpdate(float stepSeconds) override;
     void render(float alpha) override;

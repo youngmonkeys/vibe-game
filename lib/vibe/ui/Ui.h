@@ -1,7 +1,5 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
-
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -9,6 +7,7 @@
 #include <array>
 #include <cmath>
 
+#include "vibe/core/Input.h"
 #include "vibe/render/Renderer.h"
 #include "vibe/render/Text.h"
 #include "vibe/render/Texture.h"
@@ -230,7 +229,7 @@ public:
     explicit Button(std::string id, std::string label = {}) : id_(std::move(id)), label_(std::move(label)) {}
 
     // `event` is in canvas pixels (Renderer::toCanvasCoordinates).
-    bool onEvent(const SDL_Event& event);
+    bool onEvent(const InputEvent& event);
     void draw(Ui& ui, const ScreenRect& rect, ButtonStyle style = ButtonStyle::Dark, float textUnits = 22.0f);
 
     void setLabel(std::string_view label) {
@@ -281,7 +280,7 @@ public:
 
     // `event` is in canvas pixels. A click inside focuses it; Enter submits;
     // Tab asks for the next field.
-    Result onEvent(Ui& ui, const SDL_Event& event);
+    Result onEvent(Ui& ui, const InputEvent& event);
     void draw(Ui& ui, const ScreenRect& rect);
     void insert(std::string_view text);
 

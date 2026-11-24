@@ -16,7 +16,7 @@ void NodeScene::onLeave() {
     root_->exitTree();
 }
 
-void NodeScene::onEvent(const SDL_Event& event) {
+void NodeScene::onEvent(const InputEvent& event) {
     root_->dispatchEvent(event);
 }
 

@@ -1,9 +1,8 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
-
 #include <cstdint>
 
+#include "vibe/core/Input.h"
 #include "vibe/render/Renderer.h"
 
 namespace vibe::ui {
@@ -25,7 +24,7 @@ public:
 
     // `event` is in canvas pixels and may be changed (see above). Returns true
     // for motion and the release of a drag: the caller may skip hover then.
-    bool onEvent(SDL_Event& event, const ScreenRect& area, float slopPx);
+    bool onEvent(InputEvent& event, const ScreenRect& area, float slopPx);
     // Rows to move since the last call, from dragging and from the fling.
     // Positive goes forward: the content moves up (or left), showing later
     // rows. `rowPx` is one row's pitch along the axis. Call once per frame.

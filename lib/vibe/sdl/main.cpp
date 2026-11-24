@@ -4,7 +4,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#include "vibe/core/App.h"
+#include "vibe/sdl/App.h"
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     auto* app = new vibe::App();

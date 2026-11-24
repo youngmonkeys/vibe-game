@@ -1,9 +1,8 @@
 #pragma once
 
-#include <SDL3/SDL_events.h>
-
 #include <memory>
 
+#include "vibe/core/Input.h"
 #include "vibe/core/Scene.h"
 #include "vibe/node/Node.h"
 
@@ -22,7 +21,7 @@ public:
 
     void onEnter() override;
     void onLeave() override;
-    void onEvent(const SDL_Event& event) override;
+    void onEvent(const InputEvent& event) override;
     void fixedUpdate(float stepSeconds) override;
     void render(float alpha) override;
     void frameEnd() override;

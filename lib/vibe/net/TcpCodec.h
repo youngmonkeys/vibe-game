@@ -6,8 +6,6 @@
 #include <string_view>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-
 namespace vibe::net {
 
 inline constexpr std::uint8_t kTcpHeaderBigSize = 0x01;
@@ -33,9 +31,9 @@ struct TcpServerProof {
     std::vector<std::string> certificates;
 };
 
-bool msgpackToJson(std::string_view bytes, nlohmann::json& out, std::string& error);
+bool msgpackToJsonText(std::string_view bytes, std::string& jsonText, std::string& error);
 
-void jsonToMsgpack(const nlohmann::json& value, std::string& out);
+bool jsonTextToMsgpack(std::string_view jsonText, std::string& out);
 
 bool encodeTcpFrame(std::string_view jsonFrame, std::string& out, std::string& error);
 

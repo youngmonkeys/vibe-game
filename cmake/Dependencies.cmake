@@ -76,7 +76,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${sdl3_ttf_SOURCE_DIR}" "${sdl3_ttf_BINARY_DIR}" EXCLUDE_FROM_ALL SYSTEM)
 
 # SYSTEM, so the decoder's warnings never trip this repo's -Werror.
-# lib/vibe/audio/StbVorbis.cpp compiles the implementation.
+# lib/vibe/audio/Vorbis.cpp compiles the implementation.
 add_library(vibe_stb_vorbis INTERFACE)
 target_include_directories(vibe_stb_vorbis SYSTEM INTERFACE "${stb_vorbis_SOURCE_DIR}")
 

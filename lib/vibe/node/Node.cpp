@@ -155,7 +155,7 @@ void Node::exitTree() {
     onExitTree();
 }
 
-bool Node::dispatchEvent(const SDL_Event& event) {
+bool Node::dispatchEvent(const InputEvent& event) {
     if (!active_ || !visible_ || queuedForFree_) {
         return false;
     }

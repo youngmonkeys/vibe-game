@@ -3,11 +3,14 @@
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_render.h>
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_surface.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+
+#include "vibe/sdl/Sdl.h"
 
 namespace vibe {
 namespace {
@@ -23,7 +26,24 @@ void logDrawError(const char* what) {
     }
 }
 
+SDL_WindowFlags prepareWindow() {
+#ifdef __EMSCRIPTEN__
+    if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES) ||
+        !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) ||
+        !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0)) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "SDL_GL_SetAttribute failed: %s", SDL_GetError());
+    }
+    return SDL_WINDOW_OPENGL;
+#else
+    return 0;
+#endif
+}
+
 } // namespace
+
+Renderer::Renderer() : backend_(std::make_unique<Backend>()) {}
+
+Renderer::~Renderer() = default;
 
 Texture::~Texture() { reset(); }
 
@@ -49,27 +69,28 @@ Texture& Texture::operator=(Texture&& other) noexcept {
 
 void Texture::reset() {
     if (texture_) {
-        SDL_DestroyTexture(texture_);
+        SDL_DestroyTexture(sdl::texture(texture_));
         texture_ = nullptr;
     }
     width_ = 0;
     height_ = 0;
 }
 
-SDL_WindowFlags Renderer::prepareWindow() {
-#ifdef __EMSCRIPTEN__
-    if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES) ||
-        !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) ||
-        !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0)) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "SDL_GL_SetAttribute failed: %s", SDL_GetError());
-    }
-    return SDL_WINDOW_OPENGL;
+bool Renderer::create(const char* title, int width, int height) {
+#ifdef __ANDROID__
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    constexpr SDL_WindowFlags kPlatformWindowFlags = SDL_WINDOW_FULLSCREEN;
 #else
-    return 0;
+    constexpr SDL_WindowFlags kPlatformWindowFlags = 0;
 #endif
-}
-
-bool Renderer::create(SDL_Window* window) {
+    SDL_Window* window = SDL_CreateWindow(title, width, height,
+                                          SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | kPlatformWindowFlags |
+                                              prepareWindow());
+    if (!window) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateWindow failed: %s", SDL_GetError());
+        return false;
+    }
+    backend_->window = window;
     const SDL_PropertiesID props = SDL_CreateProperties();
     if (!props) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateProperties failed: %s", SDL_GetError());
@@ -77,37 +98,39 @@ bool Renderer::create(SDL_Window* window) {
     }
     SDL_SetPointerProperty(props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window);
     SDL_SetNumberProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, 1);
-    renderer_ = SDL_CreateRendererWithProperties(props);
+    backend_->renderer = SDL_CreateRendererWithProperties(props);
     SDL_DestroyProperties(props);
-    if (!renderer_) {
+    if (!backend_->renderer) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateRenderer failed: %s", SDL_GetError());
         return false;
     }
     // Alpha blending for draw-color shapes too (debug circles). Shapes with
     // alpha 255 draw as before.
-    if (!SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND)) {
+    if (!SDL_SetRenderDrawBlendMode(backend_->renderer, SDL_BLENDMODE_BLEND)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "SDL_SetRenderDrawBlendMode failed: %s", SDL_GetError());
     }
-    window_ = window;
-    SDL_Log("renderer: %s", SDL_GetRendererName(renderer_));
+    SDL_Log("renderer: %s", SDL_GetRendererName(backend_->renderer));
     return true;
 }
 
 void Renderer::destroy() {
-    if (renderer_) {
-        SDL_DestroyRenderer(renderer_);
-        renderer_ = nullptr;
+    if (backend_->renderer) {
+        SDL_DestroyRenderer(backend_->renderer);
+        backend_->renderer = nullptr;
     }
-    window_ = nullptr;
+    if (backend_->window) {
+        SDL_DestroyWindow(backend_->window);
+        backend_->window = nullptr;
+    }
     inFrame_ = false;
 }
 
 bool Renderer::beginFrame(Color clear) {
     inFrame_ = false;
-    if (!renderer_) {
+    if (!backend_->renderer) {
         return false;
     }
-    if (!SDL_GetWindowSizeInPixels(window_, &viewport_.widthPx, &viewport_.heightPx)) {
+    if (!SDL_GetWindowSizeInPixels(backend_->window, &viewport_.widthPx, &viewport_.heightPx)) {
         logDrawError("SDL_GetWindowSizeInPixels");
         return false;
     }
@@ -122,7 +145,7 @@ bool Renderer::beginFrame(Color clear) {
         skippingEmpty_ = false;
         SDL_Log("render: canvas has pixels again (%dx%d), drawing", viewport_.widthPx, viewport_.heightPx);
     }
-    if (!SDL_SetRenderDrawColor(renderer_, clear.r, clear.g, clear.b, clear.a) || !SDL_RenderClear(renderer_)) {
+    if (!SDL_SetRenderDrawColor(backend_->renderer, clear.r, clear.g, clear.b, clear.a) || !SDL_RenderClear(backend_->renderer)) {
         logDrawError("clear");
         return false;
     }
@@ -135,14 +158,14 @@ void Renderer::endFrame() {
         return;
     }
     inFrame_ = false;
-    if (!SDL_RenderPresent(renderer_)) {
+    if (!SDL_RenderPresent(backend_->renderer)) {
         logDrawError("SDL_RenderPresent");
     }
 }
 
 void Renderer::fillScreenRect(float x, float y, float w, float h) {
     const SDL_FRect rect{x, y, w, h};
-    if (!SDL_RenderFillRect(renderer_, &rect)) {
+    if (!SDL_RenderFillRect(backend_->renderer, &rect)) {
         logDrawError("SDL_RenderFillRect");
     }
 }
@@ -153,7 +176,7 @@ void Renderer::fillWorldRect(float x0, float y0, float x1, float y1, Color color
     }
     const ScreenPoint a = worldToScreen(camera_, viewport_, std::min(x0, x1), std::max(y0, y1));
     const ScreenPoint b = worldToScreen(camera_, viewport_, std::max(x0, x1), std::min(y0, y1));
-    SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawColor(backend_->renderer, color.r, color.g, color.b, color.a);
     fillScreenRect(a.x, a.y, b.x - a.x, b.y - a.y);
 }
 
@@ -166,7 +189,7 @@ void Renderer::strokeWorldRect(float x0, float y0, float x1, float y1, float thi
     const ScreenPoint b = worldToScreen(camera_, viewport_, std::max(x0, x1), std::min(y0, y1));
     const float t = std::max(thicknessPx, 1.0f);
     const float h = t * 0.5f;
-    SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawColor(backend_->renderer, color.r, color.g, color.b, color.a);
     fillScreenRect(a.x - h, a.y - h, b.x - a.x + t, t); // top
     fillScreenRect(a.x - h, b.y - h, b.x - a.x + t, t); // bottom
     fillScreenRect(a.x - h, a.y + h, t, b.y - a.y - t); // left
@@ -186,7 +209,7 @@ void Renderer::drawSprite(const Texture& texture, const PixelRect* source, float
     if (source) {
         src = SDL_FRect{source->x, source->y, source->w, source->h};
     }
-    if (!SDL_RenderTexture(renderer_, texture.texture_, source ? &src : nullptr, &dst)) {
+    if (!SDL_RenderTexture(backend_->renderer, sdl::texture(texture.texture_), source ? &src : nullptr, &dst)) {
         logDrawError("SDL_RenderTexture");
     }
 }
@@ -205,27 +228,27 @@ void Renderer::drawSprite(const Texture& texture, const SpriteDraw& sprite) {
     const SDL_FPoint center{sprite.pivotX * kx, sprite.pivotY * ky};
     const bool tinted = sprite.tintR != 255 || sprite.tintG != 255 || sprite.tintB != 255;
     if (tinted) {
-        SDL_SetTextureColorMod(texture.texture_, sprite.tintR, sprite.tintG, sprite.tintB);
+        SDL_SetTextureColorMod(sdl::texture(texture.texture_), sprite.tintR, sprite.tintG, sprite.tintB);
     }
     if (sprite.alpha != 255) {
-        SDL_SetTextureAlphaMod(texture.texture_, sprite.alpha);
+        SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), sprite.alpha);
     }
     if (sprite.additive) {
-        SDL_SetTextureBlendMode(texture.texture_, SDL_BLENDMODE_ADD);
+        SDL_SetTextureBlendMode(sdl::texture(texture.texture_), SDL_BLENDMODE_ADD);
     }
     // World angles are counter-clockwise (Y up); SDL's are clockwise (Y down).
-    if (!SDL_RenderTextureRotated(renderer_, texture.texture_, &src, &dst, -static_cast<double>(sprite.angleDegrees),
+    if (!SDL_RenderTextureRotated(backend_->renderer, sdl::texture(texture.texture_), &src, &dst, -static_cast<double>(sprite.angleDegrees),
                                   &center, SDL_FLIP_NONE)) {
         logDrawError("SDL_RenderTextureRotated");
     }
     if (tinted) {
-        SDL_SetTextureColorMod(texture.texture_, 255, 255, 255);
+        SDL_SetTextureColorMod(sdl::texture(texture.texture_), 255, 255, 255);
     }
     if (sprite.alpha != 255) {
-        SDL_SetTextureAlphaMod(texture.texture_, 255);
+        SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), 255);
     }
     if (sprite.additive) {
-        SDL_SetTextureBlendMode(texture.texture_, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureBlendMode(sdl::texture(texture.texture_), SDL_BLENDMODE_BLEND);
     }
 }
 
@@ -265,10 +288,10 @@ void Renderer::drawWorldCircle(float centerX, float centerY, float radius, Color
         q[4] = {out1, lineColor, {0, 0}};
         q[5] = {in1, lineColor, {0, 0}};
     }
-    if (fill.a > 0 && !SDL_RenderGeometry(renderer_, nullptr, fan.data(), kSegments * 3, nullptr, 0)) {
+    if (fill.a > 0 && !SDL_RenderGeometry(backend_->renderer, nullptr, fan.data(), kSegments * 3, nullptr, 0)) {
         logDrawError("SDL_RenderGeometry");
     }
-    if (outline.a > 0 && !SDL_RenderGeometry(renderer_, nullptr, ring.data(), kSegments * 6, nullptr, 0)) {
+    if (outline.a > 0 && !SDL_RenderGeometry(backend_->renderer, nullptr, ring.data(), kSegments * 6, nullptr, 0)) {
         logDrawError("SDL_RenderGeometry");
     }
 }
@@ -277,7 +300,7 @@ void Renderer::fillScreenRectAt(float x, float y, float w, float h, Color color)
     if (!inFrame_) {
         return;
     }
-    SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawColor(backend_->renderer, color.r, color.g, color.b, color.a);
     fillScreenRect(x, y, w, h);
 }
 
@@ -285,17 +308,46 @@ void Renderer::drawScreenText(float x, float y, const char* text, Color color, f
     if (!inFrame_) {
         return;
     }
-    SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
-    SDL_SetRenderScale(renderer_, scale, scale);
-    if (!SDL_RenderDebugText(renderer_, x / scale, y / scale, text)) {
+    SDL_SetRenderDrawColor(backend_->renderer, color.r, color.g, color.b, color.a);
+    SDL_SetRenderScale(backend_->renderer, scale, scale);
+    if (!SDL_RenderDebugText(backend_->renderer, x / scale, y / scale, text)) {
         logDrawError("SDL_RenderDebugText");
     }
-    SDL_SetRenderScale(renderer_, 1.0f, 1.0f);
+    SDL_SetRenderScale(backend_->renderer, 1.0f, 1.0f);
 }
 
-void Renderer::toCanvasCoordinates(SDL_Event& event) const {
-    if (renderer_ && !SDL_ConvertEventToRenderCoordinates(renderer_, &event)) {
-        logDrawError("SDL_ConvertEventToRenderCoordinates");
+void Renderer::toCanvasCoordinates(InputEvent& event) const {
+    SDL_Renderer* renderer = backend_->renderer;
+    if (!renderer) {
+        return;
+    }
+    switch (event.type) {
+    case EventType::MouseButtonDown:
+    case EventType::MouseButtonUp:
+    case EventType::MouseMotion:
+    case EventType::MouseWheel:
+        if (!SDL_RenderCoordinatesFromWindow(renderer, event.x, event.y, &event.x, &event.y)) {
+            logDrawError("SDL_RenderCoordinatesFromWindow");
+        }
+        break;
+    case EventType::FingerDown:
+    case EventType::FingerUp:
+    case EventType::FingerMotion:
+    case EventType::FingerCanceled: {
+        int w = 0;
+        int h = 0;
+        if (!backend_->window || !SDL_GetWindowSize(backend_->window, &w, &h)) {
+            logDrawError("SDL_GetWindowSize");
+            break;
+        }
+        if (!SDL_RenderCoordinatesFromWindow(renderer, event.x * static_cast<float>(w),
+                                             event.y * static_cast<float>(h), &event.x, &event.y)) {
+            logDrawError("SDL_RenderCoordinatesFromWindow");
+        }
+        break;
+    }
+    default:
+        break;
     }
 }
 
@@ -304,7 +356,7 @@ void Renderer::strokeScreenRect(const ScreenRect& rect, float thicknessPx, Color
         return;
     }
     const float t = std::max(thicknessPx, 1.0f);
-    SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+    SDL_SetRenderDrawColor(backend_->renderer, color.r, color.g, color.b, color.a);
     fillScreenRect(rect.x, rect.y, rect.w, t);
     fillScreenRect(rect.x, rect.y + rect.h - t, rect.w, t);
     fillScreenRect(rect.x, rect.y + t, t, rect.h - 2.0f * t);
@@ -326,7 +378,7 @@ void Renderer::fillScreenCircle(float centerX, float centerY, float radius, Colo
         f[1] = {{centerX + std::cos(a0) * radius, centerY + std::sin(a0) * radius}, c, {0, 0}};
         f[2] = {{centerX + std::cos(a1) * radius, centerY + std::sin(a1) * radius}, c, {0, 0}};
     }
-    if (!SDL_RenderGeometry(renderer_, nullptr, fan.data(), kSegments * 3, nullptr, 0)) {
+    if (!SDL_RenderGeometry(backend_->renderer, nullptr, fan.data(), kSegments * 3, nullptr, 0)) {
         logDrawError("SDL_RenderGeometry");
     }
 }
@@ -336,9 +388,9 @@ void Renderer::drawScreenTexture(const Texture& texture, float x, float y, Color
         return;
     }
     const SDL_FRect dst{x, y, static_cast<float>(texture.width()), static_cast<float>(texture.height())};
-    SDL_SetTextureColorMod(texture.texture_, tint.r, tint.g, tint.b);
-    SDL_SetTextureAlphaMod(texture.texture_, tint.a);
-    if (!SDL_RenderTexture(renderer_, texture.texture_, nullptr, &dst)) {
+    SDL_SetTextureColorMod(sdl::texture(texture.texture_), tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), tint.a);
+    if (!SDL_RenderTexture(backend_->renderer, sdl::texture(texture.texture_), nullptr, &dst)) {
         logDrawError("SDL_RenderTexture");
     }
 }
@@ -348,9 +400,9 @@ void Renderer::drawScreenTexture(const Texture& texture, const ScreenRect& rect,
         return;
     }
     const SDL_FRect dst{rect.x, rect.y, rect.w, rect.h};
-    SDL_SetTextureColorMod(texture.texture_, tint.r, tint.g, tint.b);
-    SDL_SetTextureAlphaMod(texture.texture_, tint.a);
-    if (!SDL_RenderTexture(renderer_, texture.texture_, nullptr, &dst)) {
+    SDL_SetTextureColorMod(sdl::texture(texture.texture_), tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), tint.a);
+    if (!SDL_RenderTexture(backend_->renderer, sdl::texture(texture.texture_), nullptr, &dst)) {
         logDrawError("SDL_RenderTexture");
     }
 }
@@ -363,9 +415,9 @@ void Renderer::drawScreenNineSlice(const Texture& texture, const ScreenRect& rec
     // Corners never larger than half the rectangle.
     scale = std::min({scale, rect.w * 0.5f / corner, rect.h * 0.5f / corner});
     const SDL_FRect dst{rect.x, rect.y, rect.w, rect.h};
-    SDL_SetTextureColorMod(texture.texture_, tint.r, tint.g, tint.b);
-    SDL_SetTextureAlphaMod(texture.texture_, tint.a);
-    if (!SDL_RenderTexture9Grid(renderer_, texture.texture_, nullptr, corner, corner, corner, corner, scale, &dst)) {
+    SDL_SetTextureColorMod(sdl::texture(texture.texture_), tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), tint.a);
+    if (!SDL_RenderTexture9Grid(backend_->renderer, sdl::texture(texture.texture_), nullptr, corner, corner, corner, corner, scale, &dst)) {
         logDrawError("SDL_RenderTexture9Grid");
     }
 }
@@ -402,9 +454,9 @@ void Renderer::drawScreenTextureGradient(const Texture& texture, const ScreenRec
     const SDL_Vertex v[4] = {{{x, y}, t, {0, 0}}, {{x + w, y}, t, {1, 0}}, {{x + w, y + h}, b, {1, 1}},
                              {{x, y + h}, b, {0, 1}}};
     const int indices[6] = {0, 1, 2, 0, 2, 3};
-    SDL_SetTextureColorMod(texture.texture_, 255, 255, 255);
-    SDL_SetTextureAlphaMod(texture.texture_, 255);
-    if (!SDL_RenderGeometry(renderer_, texture.texture_, v, 4, indices, 6)) {
+    SDL_SetTextureColorMod(sdl::texture(texture.texture_), 255, 255, 255);
+    SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), 255);
+    if (!SDL_RenderGeometry(backend_->renderer, sdl::texture(texture.texture_), v, 4, indices, 6)) {
         logDrawError("SDL_RenderGeometry");
     }
 }
@@ -432,7 +484,7 @@ void Renderer::fillConvex(const ScreenVec* points, int count, float gradientTop,
         idx[static_cast<std::size_t>(i * 3 + 1)] = i + 1;
         idx[static_cast<std::size_t>(i * 3 + 2)] = (i + 1) % count + 1;
     }
-    if (!SDL_RenderGeometry(renderer_, nullptr, v.data(), count + 1, idx.data(), count * 3)) {
+    if (!SDL_RenderGeometry(backend_->renderer, nullptr, v.data(), count + 1, idx.data(), count * 3)) {
         logDrawError("SDL_RenderGeometry");
     }
 }
@@ -483,7 +535,7 @@ void Renderer::strokeConvex(const ScreenVec* points, int count, float thicknessP
             idx[j * 6 + static_cast<std::size_t>(k)] = q[k];
         }
     }
-    if (!SDL_RenderGeometry(renderer_, nullptr, v.data(), count * 2, idx.data(), count * 6)) {
+    if (!SDL_RenderGeometry(backend_->renderer, nullptr, v.data(), count * 2, idx.data(), count * 6)) {
         logDrawError("SDL_RenderGeometry");
     }
 }
@@ -505,7 +557,7 @@ void Renderer::fillGlow(float centerX, float centerY, float radiusX, float radiu
         idx[static_cast<std::size_t>(i * 3 + 1)] = i + 1;
         idx[static_cast<std::size_t>(i * 3 + 2)] = (i + 1) % kSegments + 1;
     }
-    if (!SDL_RenderGeometry(renderer_, nullptr, v.data(), kSegments + 1, idx.data(), kSegments * 3)) {
+    if (!SDL_RenderGeometry(backend_->renderer, nullptr, v.data(), kSegments + 1, idx.data(), kSegments * 3)) {
         logDrawError("SDL_RenderGeometry");
     }
 }
@@ -522,13 +574,13 @@ void Renderer::setScreenClip(const ScreenRect& rect) {
     }
     const SDL_Rect clip{static_cast<int>(std::floor(rect.x)), static_cast<int>(std::floor(rect.y)),
                         static_cast<int>(std::ceil(rect.w)), static_cast<int>(std::ceil(rect.h))};
-    if (!SDL_SetRenderClipRect(renderer_, &clip)) {
+    if (!SDL_SetRenderClipRect(backend_->renderer, &clip)) {
         logDrawError("SDL_SetRenderClipRect");
     }
 }
 
 void Renderer::clearScreenClip() {
-    if (renderer_ && !SDL_SetRenderClipRect(renderer_, nullptr)) {
+    if (backend_->renderer && !SDL_SetRenderClipRect(backend_->renderer, nullptr)) {
         logDrawError("SDL_SetRenderClipRect");
     }
 }
@@ -545,9 +597,9 @@ void Renderer::drawWorldTexture(const Texture& texture, float left, float bottom
         return;
     }
     const SDL_FRect dst{a.x, a.y, b.x - a.x, b.y - a.y};
-    SDL_SetTextureColorMod(texture.texture_, 255, 255, 255);
-    SDL_SetTextureAlphaMod(texture.texture_, 255);
-    if (!SDL_RenderTexture(renderer_, texture.texture_, nullptr, &dst)) {
+    SDL_SetTextureColorMod(sdl::texture(texture.texture_), 255, 255, 255);
+    SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), 255);
+    if (!SDL_RenderTexture(backend_->renderer, sdl::texture(texture.texture_), nullptr, &dst)) {
         logDrawError("SDL_RenderTexture");
     }
 }
@@ -566,9 +618,9 @@ void Renderer::fillViewportTiled(const Texture& texture, float tileUnits) {
     const float tilePx = tileUnits * ppu;
     const SDL_FRect dst{corner.x, corner.y, static_cast<float>(viewport_.widthPx) - corner.x + tilePx,
                         static_cast<float>(viewport_.heightPx) - corner.y + tilePx};
-    SDL_SetTextureColorMod(texture.texture_, 255, 255, 255);
-    SDL_SetTextureAlphaMod(texture.texture_, 255);
-    if (!SDL_RenderTextureTiled(renderer_, texture.texture_, nullptr, tilePx / static_cast<float>(texture.width()),
+    SDL_SetTextureColorMod(sdl::texture(texture.texture_), 255, 255, 255);
+    SDL_SetTextureAlphaMod(sdl::texture(texture.texture_), 255);
+    if (!SDL_RenderTextureTiled(backend_->renderer, sdl::texture(texture.texture_), nullptr, tilePx / static_cast<float>(texture.width()),
                                 &dst)) {
         logDrawError("SDL_RenderTextureTiled");
     }
@@ -590,15 +642,15 @@ void Renderer::drawMinimap(const ScreenRect& area, float mapSize, float border, 
     };
     if (ground && ground->valid()) {
         const SDL_FRect dst{left, top, side, side};
-        SDL_SetTextureColorMod(ground->texture_, 255, 255, 255);
-        SDL_SetTextureAlphaMod(ground->texture_, 255);
-        if (!SDL_RenderTexture(renderer_, ground->texture_, nullptr, &dst)) {
+        SDL_SetTextureColorMod(sdl::texture(ground->texture_), 255, 255, 255);
+        SDL_SetTextureAlphaMod(sdl::texture(ground->texture_), 255);
+        if (!SDL_RenderTexture(backend_->renderer, sdl::texture(ground->texture_), nullptr, &dst)) {
             logDrawError("SDL_RenderTexture");
         }
     } else {
-        SDL_SetRenderDrawColor(renderer_, 16, 24, 20, 210);
+        SDL_SetRenderDrawColor(backend_->renderer, 16, 24, 20, 210);
         fillScreenRect(left, top, side, side);
-        SDL_SetRenderDrawColor(renderer_, 58, 94, 64, 230);
+        SDL_SetRenderDrawColor(backend_->renderer, 58, 94, 64, 230);
         const SDL_FPoint inner0 = toScreen(border, mapSize - border);
         const float innerSide = (mapSize - 2.0f * border) * scale;
         fillScreenRect(inner0.x, inner0.y, innerSide, innerSide);
@@ -617,8 +669,9 @@ void Renderer::drawMinimap(const ScreenRect& area, float mapSize, float border, 
     }
 }
 
-Texture Renderer::createTextureFromSurface(SDL_Surface* surface, TextureFilter filter) {
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+Texture Renderer::createTextureFromSurface(void* source, TextureFilter filter) {
+    SDL_Surface* surface = static_cast<SDL_Surface*>(source);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(backend_->renderer, surface);
     if (!texture) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
         return {};
@@ -631,7 +684,7 @@ Texture Renderer::createTextureFromSurface(SDL_Surface* surface, TextureFilter f
 }
 
 void Renderer::flush() {
-    if (inFrame_ && !SDL_FlushRenderer(renderer_)) {
+    if (inFrame_ && !SDL_FlushRenderer(backend_->renderer)) {
         logDrawError("SDL_FlushRenderer");
     }
 }
@@ -645,7 +698,7 @@ Texture Renderer::createTextureRgba(int width, int height, const std::uint8_t* p
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateSurfaceFrom failed: %s", SDL_GetError());
         return {};
     }
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(backend_->renderer, surface);
     SDL_DestroySurface(surface);
     if (!texture) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateTextureFromSurface failed: %s", SDL_GetError());
@@ -689,7 +742,7 @@ Texture Renderer::loadPngMask(const char* path) {
 Texture Renderer::loadPng(const char* path, TextureFilter filter) {
     Texture texture = loadPng(path);
     if (texture.valid() && filter == TextureFilter::PixelArt &&
-        !SDL_SetTextureScaleMode(texture.texture_, SDL_SCALEMODE_PIXELART)) {
+        !SDL_SetTextureScaleMode(sdl::texture(texture.texture_), SDL_SCALEMODE_PIXELART)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "SDL_SetTextureScaleMode(%s, PIXELART) failed: %s", path,
                     SDL_GetError());
     }
@@ -699,7 +752,7 @@ Texture Renderer::loadPng(const char* path, TextureFilter filter) {
 Texture Renderer::loadPngMask(const char* path, TextureFilter filter) {
     Texture texture = loadPngMask(path);
     if (texture.valid() && filter == TextureFilter::PixelArt &&
-        !SDL_SetTextureScaleMode(texture.texture_, SDL_SCALEMODE_PIXELART)) {
+        !SDL_SetTextureScaleMode(sdl::texture(texture.texture_), SDL_SCALEMODE_PIXELART)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "SDL_SetTextureScaleMode(%s, PIXELART) failed: %s", path,
                     SDL_GetError());
     }
@@ -719,7 +772,7 @@ Texture Renderer::loadPng(const char* path) {
     }
     const int width = surface->w;
     const int height = surface->h;
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(backend_->renderer, surface);
     SDL_DestroySurface(surface);
     if (!texture) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateTextureFromSurface(%s) failed: %s", path,

@@ -31,6 +31,18 @@ TTF_Font* openFont(const char* path, const char* role, float sizePx = 24.0f) {
 
 } // namespace
 
+struct TextCache::Fonts {
+    TTF_Font* body = nullptr;
+    TTF_Font* title = nullptr;
+    TTF_Font* fallback = nullptr;
+};
+
+TextCache::TextCache(Renderer& renderer) : renderer_(renderer), fonts_(std::make_unique<Fonts>()) {}
+
+bool TextCache::ready() const {
+    return fonts_->body || fonts_->title;
+}
+
 TextCache::~TextCache() {
     shutdown();
 }
@@ -46,28 +58,28 @@ bool TextCache::init(const char* bodyPath, const char* titlePath, int pixelGrid,
             SDL_VERSIONNUM_MICRO(version));
     pixelGrid_ = std::max(0, pixelGrid);
     const float openSize = pixelGrid_ > 0 ? static_cast<float>(pixelGrid_) : 24.0f;
-    body_ = openFont(bodyPath, "body", openSize);
-    title_ = openFont(titlePath, "title", openSize);
+    fonts_->body = openFont(bodyPath, "body", openSize);
+    fonts_->title = openFont(titlePath, "title", openSize);
     if (pixelGrid_ > 0) {
         // Outlines already sit on whole pixels at the grid size; hinting
         // would only move them.
-        for (TTF_Font* font : {body_, title_}) {
+        for (TTF_Font* font : {fonts_->body, fonts_->title}) {
             if (font) {
                 TTF_SetFontHinting(font, TTF_HINTING_NONE);
             }
         }
-        fallback_ = openFont(fallbackPath, "fallback", openSize);
-        for (TTF_Font* font : {body_, title_}) {
-            if (font && fallback_ && !TTF_AddFallbackFont(font, fallback_)) {
+        fonts_->fallback = openFont(fallbackPath, "fallback", openSize);
+        for (TTF_Font* font : {fonts_->body, fonts_->title}) {
+            if (font && fonts_->fallback && !TTF_AddFallbackFont(font, fonts_->fallback)) {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "text: TTF_AddFallbackFont failed: %s", SDL_GetError());
             }
         }
     }
-    if (!body_ && title_) {
+    if (!fonts_->body && fonts_->title) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "text: body text uses the title font");
-    } else if (body_ && !title_) {
+    } else if (fonts_->body && !fonts_->title) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "text: titles use the body font");
-    } else if (!body_ && !title_) {
+    } else if (!fonts_->body && !fonts_->title) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "text: no font loaded; the UI draws without text");
         return false;
     }
@@ -78,18 +90,18 @@ bool TextCache::init(const char* bodyPath, const char* titlePath, int pixelGrid,
 void TextCache::shutdown() {
     // Textures before the fonts and the renderer.
     entries_.clear();
-    if (body_) {
-        TTF_CloseFont(body_);
-        body_ = nullptr;
+    if (fonts_->body) {
+        TTF_CloseFont(fonts_->body);
+        fonts_->body = nullptr;
     }
-    if (title_) {
-        TTF_CloseFont(title_);
-        title_ = nullptr;
+    if (fonts_->title) {
+        TTF_CloseFont(fonts_->title);
+        fonts_->title = nullptr;
     }
     // After the fonts that use it as a fallback.
-    if (fallback_) {
-        TTF_CloseFont(fallback_);
-        fallback_ = nullptr;
+    if (fonts_->fallback) {
+        TTF_CloseFont(fonts_->fallback);
+        fonts_->fallback = nullptr;
     }
     if (ttfStarted_) {
         TTF_Quit();
@@ -97,8 +109,8 @@ void TextCache::shutdown() {
     }
 }
 
-TTF_Font* TextCache::fontFor(FontFace face, int sizePx) {
-    TTF_Font* font = face == FontFace::Title ? (title_ ? title_ : body_) : (body_ ? body_ : title_);
+void* TextCache::fontFor(FontFace face, int sizePx) {
+    TTF_Font* font = face == FontFace::Title ? (fonts_->title ? fonts_->title : fonts_->body) : (fonts_->body ? fonts_->body : fonts_->title);
     if (!font) {
         return nullptr;
     }
@@ -130,7 +142,7 @@ const TextCache::Entry* TextCache::find(FontFace face, int sizePx, std::string_v
     if (text.empty()) {
         return nullptr;
     }
-    TTF_Font* font = fontFor(face, sizePx);
+    TTF_Font* font = static_cast<TTF_Font*>(fontFor(face, sizePx));
     if (!font) {
         return nullptr;
     }
@@ -202,7 +214,7 @@ TextSize TextCache::drawGradient(FontFace face, int sizePx, std::string_view tex
 }
 
 std::size_t TextCache::fitBytes(FontFace face, int sizePx, std::string_view text, int maxWidthPx) {
-    TTF_Font* font = fontFor(face, std::clamp(sizePx, kMinSizePx, kMaxSizePx));
+    TTF_Font* font = static_cast<TTF_Font*>(fontFor(face, std::clamp(sizePx, kMinSizePx, kMaxSizePx)));
     if (!font || text.empty() || maxWidthPx <= 0) {
         return 0;
     }
@@ -221,7 +233,7 @@ std::size_t TextCache::fitBytes(FontFace face, int sizePx, std::string_view text
 }
 
 int TextCache::lineHeight(FontFace face, int sizePx) {
-    TTF_Font* font = fontFor(face, std::clamp(sizePx, kMinSizePx, kMaxSizePx));
+    TTF_Font* font = static_cast<TTF_Font*>(fontFor(face, std::clamp(sizePx, kMinSizePx, kMaxSizePx)));
     return font ? static_cast<int>(std::lround(static_cast<float>(TTF_GetFontHeight(font)) * scaleFor(sizePx))) : sizePx;
 }
 

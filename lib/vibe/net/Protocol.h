@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <functional>
 #include <map>
-#include <nlohmann/json_fwd.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,6 +10,7 @@
 #include <vector>
 
 #include "vibe/net/Decode.h"
+#include "vibe/net/Json.h"
 #include "vibe/net/Messages.h"
 
 namespace vibe::net {
@@ -25,7 +25,7 @@ struct HttpAnswer {
 
 class Protocol {
 public:
-    using CommandDecoder = std::function<DecodeResult(const nlohmann::json& payload, InboundMessage& out)>;
+    using CommandDecoder = std::function<DecodeResult(const Json& payload, InboundMessage& out)>;
     using HttpDecoder = std::function<InboundMessage(const HttpAnswer& answer)>;
     using Coalescer = std::function<bool(InboundMessage& queued, const InboundMessage& incoming)>;
 
@@ -36,7 +36,7 @@ public:
     template <class Message, class Decode>
     Protocol& command(std::string_view name, Decode decode) {
         static_assert(isInboundMessage<Message>, "the message is not in GameAppMessages");
-        return command(name, CommandDecoder([decode = std::move(decode)](const nlohmann::json& payload,
+        return command(name, CommandDecoder([decode = std::move(decode)](const Json& payload,
                                                                          InboundMessage& out) {
             Message& message = out.template emplace<Message>();
             const DecodeResult result = decode(payload, message);

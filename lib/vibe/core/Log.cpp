@@ -1,10 +1,13 @@
 #include "vibe/core/Log.h"
 
 #include <SDL3/SDL_log.h>
+#include <SDL3/SDL_timer.h>
 
+#include <cstdarg>
 #include <cstdio>
 
 #include "vibe/core/AppInfo.h"
+#include "vibe/core/Time.h"
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -45,6 +48,10 @@ void SDLCALL writeLog(void* /*userdata*/, int /*category*/, SDL_LogPriority prio
 #endif
 }
 
+void logWith(SDL_LogPriority priority, const char* format, std::va_list args) {
+    SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, priority, format, args);
+}
+
 } // namespace
 
 void installLogOutput() {
@@ -52,6 +59,42 @@ void installLogOutput() {
 #ifdef VIBE_DEV
     SDL_SetLogPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_DEBUG);
 #endif
+}
+
+void logDebug(const char* format, ...) {
+    std::va_list args;
+    va_start(args, format);
+    logWith(SDL_LOG_PRIORITY_DEBUG, format, args);
+    va_end(args);
+}
+
+void logInfo(const char* format, ...) {
+    std::va_list args;
+    va_start(args, format);
+    logWith(SDL_LOG_PRIORITY_INFO, format, args);
+    va_end(args);
+}
+
+void logWarn(const char* format, ...) {
+    std::va_list args;
+    va_start(args, format);
+    logWith(SDL_LOG_PRIORITY_WARN, format, args);
+    va_end(args);
+}
+
+void logError(const char* format, ...) {
+    std::va_list args;
+    va_start(args, format);
+    logWith(SDL_LOG_PRIORITY_ERROR, format, args);
+    va_end(args);
+}
+
+std::uint64_t ticksMs() {
+    return SDL_GetTicks();
+}
+
+std::uint64_t ticksNs() {
+    return SDL_GetTicksNS();
 }
 
 } // namespace vibe
