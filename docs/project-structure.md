@@ -99,6 +99,8 @@ vibe-game/
 │       ├── main.cpp        SDL main callbacks only; asks the game for vibe::createGame()
 │       ├── core/           App (window, loop, fixed step), Game, Scene, HostConfig, Log, AppInfo, debug/ (ImGui)
 │       ├── render/         Renderer (SDL_Renderer), Camera, Texture, Text (SDL3_ttf); SDL_GPU later
+│       ├── math/           Vec3, Vec4, Quat, Mat4, Transform; the world is 3D, a 2D game keeps z at 0
+│       ├── node/           Node (a tree of nodes, the Composite pattern), NodeScene, SpriteNode
 │       ├── physics/        (planned) Jolt / Box2D wrappers
 │       ├── audio/          music stream and effects by cue name
 │       ├── assets/         (planned) asset loading via SDL_IOStream (manifest, atlases, glTF, KTX2)
@@ -113,6 +115,7 @@ vibe-game/
 ├── shaders/                (planned) HLSL sources (*.vert.hlsl, *.frag.hlsl), compiled offline with SDL_shadercross
 ├── src/                    the game (here: the sample, one scene and a guest login)
 │   └── net/GameProtocol.h  the game's messages and protocol hooks
+├── tests/node/             tests for the math, the camera and the node tree
 ├── assets/                 runtime assets, packed as /assets (png, ogg, ttf, json)
 ├── config/configs.json     server addresses, packed as /config/configs.json
 ├── tools/                  (planned) asset and shader build scripts

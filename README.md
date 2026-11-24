@@ -10,6 +10,8 @@ Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds 
 | `lib/vibe/main.cpp` | The SDL main callbacks. It asks your game for a `vibe::Game` through `vibe::createGame()`. |
 | `lib/vibe/core/` | `App` (window, frame loop, fixed 40 Hz step), `Game`, `Scene`, `HostConfig`, `Log`, the ImGui dev overlay |
 | `lib/vibe/render/` | `Renderer` (SDL_Renderer: rects, circles, sprites, nine-slice, gradients, debug text), `Camera`, `Texture`, `Text` (SDL3_ttf) |
+| `lib/vibe/math/` | `Vec3`, `Vec4`, `Quat`, `Mat4`, `Transform`: the 3D math every part of the engine shares |
+| `lib/vibe/node/` | `Node` (a tree of nodes, the Composite pattern), `NodeScene`, `SpriteNode` |
 | `lib/vibe/audio/` | Music streamed from Ogg Vorbis and sound effects, by cue names you list |
 | `lib/vibe/platform/` | Device, fullscreen, paste, touch text input, settings file, token store, per platform |
 | `lib/vibe/ui/` | Immediate-mode widgets (`Ui`, `Style`, drag scroll, rotate screen) |
@@ -17,6 +19,7 @@ Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds 
 | `cmake/` | `VibeGame.cmake` with `vibe_add_game`, dependencies (pinned), packaging for each platform, the MinGW toolchain |
 | `platform/` | Default web shell, Info.plist templates, AndroidManifest template, the engine's Android Java, default icons |
 | `src/` | Your game. The sample here moves a square and logs in as a guest. |
+| `tests/node/` | Tests for the math, the camera and the node tree (`ctest` on macOS, Linux and the browser) |
 | `config/configs.json` | Server addresses packed into the game as `/config/configs.json` |
 | `assets/` | Your game's files, packed as `/assets` |
 | `docs/project-structure.md` | The cross-platform guide: library stack, project layout, SDL3 conventions, per-platform builds, web rules, checklist |
@@ -97,6 +100,72 @@ session.quickPlay();                 // anonymous account, or session.login(user
 ```
 
 Release builds refuse `http://` and `ws://` server URLs; dev builds warn and continue.
+
+## The world is 3D
+
+World space is X right, Y up, Z toward the viewer, the same as the server. Positions are `vibe::Vec3`, rotations are `vibe::Quat`, and a `vibe::Transform` is position, rotation and scale. A 2D game keeps every z at 0 and turns things with `Quat::aroundZ(radians)`; nothing else changes.
+
+`vibe::Camera` has a `position`, a `rotation` and a `projection`. The default is `Projection::Orthographic` with `orthoHalfHeight` 15, so the view is 30 world units high at any canvas size. `Projection::Perspective` uses `fovYRadians`, `nearPlane` and `farPlane`. The camera looks along its local -Z.
+
+| Helper | What |
+|---|---|
+| `Camera::at(position)` | The default camera placed at a point |
+| `pixelsPerUnit(camera, viewport)` | Canvas pixels per world unit for the orthographic camera |
+| `worldToScreen(camera, viewport, x, y)` | A point on the z = 0 plane to canvas pixels; what `Renderer` uses |
+| `projectToScreen(camera, viewport, point, out, &depth)` | Any 3D point through the full camera (rotation, either projection); false behind a perspective camera |
+| `screenToWorldRay(camera, viewport, x, y, origin, direction)` | The ray under a canvas pixel, for picking |
+| `camera.view()`, `camera.projectionMatrix(aspect)`, `camera.viewProjection(aspect)` | The matrices, for the SDL_GPU renderer to come |
+
+`Renderer` still draws through SDL_Renderer: it draws the z = 0 plane with the orthographic camera's `position` and `orthoHalfHeight`, and ignores the camera's rotation and z. Real 3D drawing (meshes, depth, perspective) comes with the SDL_GPU renderer; the math and the camera are already in place for it.
+
+## Nodes
+
+`vibe::Node` is a tree: each node has a `Transform`, a parent and children, and every call on a node runs on its whole subtree (the Composite pattern). Use it for anything made of parts that move together: a character with its weapon and health bar, a panel holding buttons, a camera rig.
+
+```cpp
+class Hero final : public vibe::Node {
+public:
+    using Node::Node;
+
+protected:
+    void onFixedUpdate(float step) override { setPosition(position() + vibe::Vec3{2.0f * step, 0.0f, 0.0f}); }
+};
+
+class PlayScene final : public vibe::NodeScene {
+public:
+    PlayScene(vibe::Renderer& renderer, const vibe::Texture& swordTexture) : NodeScene(renderer) {
+        auto& hero = root().emplaceChild<Hero>("hero");
+        auto& sword = hero.emplaceChild<vibe::SpriteNode>("sword");
+        sword.setTexture(&swordTexture);
+        sword.setPosition(0.6f, 0.2f);
+    }
+};
+```
+
+| On a node | What |
+|---|---|
+| `emplaceChild<T>(args...)`, `addChild(std::unique_ptr<Node>)` | Adds a child; the parent owns it. Draw order is child order, later on top |
+| `detach()`, `detachChild(child)` | Takes a node out of the tree and hands back ownership |
+| `queueFree()` | Removes and destroys the node at the end of the frame (`NodeScene::frameEnd` calls `flushPending`); safe from inside its own update or event |
+| `findChild(name)`, `findDescendant(name)`, `childAt(i)`, `childCount()` | Lookup |
+| `setPosition`, `setRotation(Quat)`, `setRotationZ(radians)`, `setScale`, `setTransform` | The local transform, relative to the parent |
+| `worldMatrix()`, `toWorld(local)`, `toLocal(world)` | World space |
+| `setActive(false)` | No updates and no events for the subtree; it is still drawn |
+| `setVisible(false)` | Not drawn and no events for the subtree |
+| `snapInterpolation()` | Jump to the current transform this frame instead of sliding from the last step (after a teleport) |
+
+The hooks a node overrides:
+
+| Hook | When |
+|---|---|
+| `onEnterTree()`, `onExitTree()` | The node joined or left a running scene |
+| `onFixedUpdate(step)` | Every 40 Hz step, parent before children |
+| `onEvent(event)` | Children first, last child first (the one drawn on top); return true to stop the event there |
+| `onRender(renderer, world)` | Every frame, parent before children; `world` is the node's world matrix between the last two steps, so motion is smooth at any frame rate |
+
+`SpriteNode` draws a texture (or one atlas frame with `setSource` and `setPivot`) at its world position, rotation about Z and scale, `setUnitsPerPixel` world units per texture pixel (default 0.01).
+
+`NodeScene` is a `vibe::Scene` that owns a root node and drives it. Override a scene hook and call the base one to keep the tree running. Adding, detaching and freeing nodes while the tree is being walked is safe. A scene that is not a `NodeScene` can still own a `Node` and call `enterTree`, `dispatchEvent`, `fixedUpdate`, `render` and `flushPending` itself.
 
 ## What is not generic yet
 

@@ -178,7 +178,7 @@ void Renderer::drawSprite(const Texture& texture, const PixelRect* source, float
     if (!inFrame_ || !texture.valid()) {
         return;
     }
-    const float scale = pixelsPerUnit(viewport_);
+    const float scale = pixelsPerUnit(camera_, viewport_);
     const ScreenPoint center = worldToScreen(camera_, viewport_, centerX, centerY);
     const SDL_FRect dst{center.x - width * scale * 0.5f, center.y - height * scale * 0.5f, width * scale,
                         height * scale};
@@ -195,7 +195,7 @@ void Renderer::drawSprite(const Texture& texture, const SpriteDraw& sprite) {
     if (!inFrame_ || !texture.valid()) {
         return;
     }
-    const float scale = pixelsPerUnit(viewport_);
+    const float scale = pixelsPerUnit(camera_, viewport_);
     const float kx = sprite.unitsPerPixelX * scale;
     const float ky = sprite.unitsPerPixelY * scale;
     const ScreenPoint pivot = worldToScreen(camera_, viewport_, sprite.worldX, sprite.worldY);
@@ -235,7 +235,7 @@ void Renderer::drawWorldCircle(float centerX, float centerY, float radius, Color
         return;
     }
     constexpr int kSegments = 48;
-    const float scale = pixelsPerUnit(viewport_);
+    const float scale = pixelsPerUnit(camera_, viewport_);
     const ScreenPoint c = worldToScreen(camera_, viewport_, centerX, centerY);
     const float r = radius * scale;
     const float half = std::max(thicknessPx, 1.0f) * 0.5f;
@@ -556,12 +556,12 @@ void Renderer::fillViewportTiled(const Texture& texture, float tileUnits) {
     if (!inFrame_ || !texture.valid() || tileUnits <= 0.0f) {
         return;
     }
-    const float ppu = pixelsPerUnit(viewport_);
+    const float ppu = pixelsPerUnit(camera_, viewport_);
     const float halfW = static_cast<float>(viewport_.widthPx) * 0.5f / ppu;
     const float halfH = static_cast<float>(viewport_.heightPx) * 0.5f / ppu;
     // The tile corner at or beyond the canvas's top-left, in world units.
-    const float left = std::floor((camera_.x - halfW) / tileUnits) * tileUnits;
-    const float top = std::ceil((camera_.y + halfH) / tileUnits) * tileUnits;
+    const float left = std::floor((camera_.position.x - halfW) / tileUnits) * tileUnits;
+    const float top = std::ceil((camera_.position.y + halfH) / tileUnits) * tileUnits;
     const ScreenPoint corner = worldToScreen(camera_, viewport_, left, top);
     const float tilePx = tileUnits * ppu;
     const SDL_FRect dst{corner.x, corner.y, static_cast<float>(viewport_.widthPx) - corner.x + tilePx,

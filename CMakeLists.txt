@@ -8,3 +8,8 @@ vibe_add_game(VibeGame
     ORG youngmonkeys
     ID vibegame
     BUNDLE_ID org.youngmonkeys.vibegame)
+
+if(VIBE_ANDROID OR VIBE_WINDOWS OR VIBE_IOS)
+    return()
+endif()
+add_subdirectory(tests/node)
