@@ -4,7 +4,6 @@
 #include <SDL3/SDL_log.h>
 
 #include <cmath>
-#include <variant>
 
 namespace game {
 namespace {
@@ -20,7 +19,10 @@ vibe::net::SessionConfig sessionConfig(const vibe::HostConfig& config) {
 } // namespace
 
 PlayScene::PlayScene(vibe::Renderer& renderer, const vibe::HostConfig& config)
-    : renderer_(renderer), session_(sessionConfig(config), *this) {}
+    : renderer_(renderer), session_(sessionConfig(config), protocol_, *this) {
+    subscriptions_ += session_.messages().on(this, &PlayScene::onGameServers);
+    subscriptions_ += session_.messages().on(this, &PlayScene::onHttpFailed);
+}
 
 void PlayScene::onEvent(const SDL_Event& event) {
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.key == SDLK_L) {
@@ -115,19 +117,17 @@ void PlayScene::onSessionFailed(const std::string& reason, const std::string& me
     status_ = message + " (L to retry)";
 }
 
-void PlayScene::onHttpResult(const vibe::net::InboundMessage& message) {
-    if (const auto* list = std::get_if<vibe::net::HttpGameServerList>(&message)) {
-        if (list->servers.empty()) {
-            status_ = "No game server is running";
-            return;
-        }
-        status_ = "Connecting to " + list->servers.front().displayName + "...";
-        session_.selectServer(list->servers.front().id);
+void PlayScene::onGameServers(const vibe::net::HttpGameServerList& list) {
+    if (list.servers.empty()) {
+        status_ = "No game server is running";
         return;
     }
-    if (const auto* failed = std::get_if<vibe::net::HttpFailed>(&message)) {
-        status_ = std::string(vibe::net::userMessage(*failed)) + " (L to retry)";
-    }
+    status_ = "Connecting to " + list.servers.front().displayName + "...";
+    session_.selectServer(list.servers.front().id);
+}
+
+void PlayScene::onHttpFailed(const vibe::net::HttpFailed& failed) {
+    status_ = std::string(vibe::net::userMessage(failed)) + " (L to retry)";
 }
 
 } // namespace game

@@ -27,11 +27,13 @@ void completeRequest(HttpClient::Request* request, int status, char* data, std::
     const double elapsedMs = nowMs() - request->startedMs;
     // Status, size and time only. Never the headers or the body: the login
     // answer holds both tokens.
-    SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "http: %s answered %d, %llu bytes, %.0f ms", httpStepName(request->step),
-                 status, static_cast<unsigned long long>(size), elapsedMs);
     if (request->owner) {
+        const Protocol& protocol = request->owner->protocol();
+        SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "http: %s answered %d, %llu bytes, %.0f ms",
+                     httpStepName(protocol, request->step), status, static_cast<unsigned long long>(size), elapsedMs);
         const std::string_view body(data ? data : "", data ? size : 0);
-        request->owner->deliver(request, decodeHttpResponse(request->step, status, body, elapsedMs, request->firstPage));
+        request->owner->deliver(request,
+                                decodeHttpResponse(protocol, request->step, status, body, elapsedMs, request->firstPage));
     }
     // The buffer holds the login answer with its tokens, or the register
     // answer with a password.

@@ -12,7 +12,7 @@ struct TrafficCounters {
     std::uint64_t framesOut = 0;
     std::uint64_t bytesIn = 0;
     std::uint64_t framesIn = 0;
-    // Stream messages (isStreamMessage) decoded, before the inbound queue coalesces them.
+    // Stream messages (Protocol::stream) decoded, before the inbound queue coalesces them.
     std::uint64_t streamIn = 0;
     std::uint64_t udpFramesIn = 0;
     std::uint64_t udpStreamIn = 0;

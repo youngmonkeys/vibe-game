@@ -15,7 +15,7 @@ Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds 
 | `lib/vibe/audio/` | Music streamed from Ogg Vorbis and sound effects, by cue names you list |
 | `lib/vibe/platform/` | Device, fullscreen, paste, touch text input, settings file, token store, per platform |
 | `lib/vibe/ui/` | Immediate-mode widgets (`Ui`, `Style`, drag scroll, rotate screen) |
-| `lib/vibe/net/` | EzyPlatform login (ezylogin), game master (servers and instances), EzyFox session over WebSocket (web) or TCP / TCP+UDP with encryption (native) |
+| `lib/vibe/net/` | EzyPlatform login (ezylogin), game master (servers and instances), EzyFox session over WebSocket (web) or TCP / TCP+UDP with encryption (native); `Protocol` (decoders by command), `MessageDispatcher` (handlers by message type) |
 | `cmake/` | `VibeGame.cmake` with `vibe_add_game`, dependencies (pinned), packaging for each platform, the MinGW toolchain |
 | `platform/` | Default web shell, Info.plist templates, AndroidManifest template, the engine's Android Java, default icons |
 | `src/` | Your game. The sample here moves a square and logs in as a guest. |
@@ -72,17 +72,95 @@ std::unique_ptr<vibe::Game> vibe::createGame() {
 }
 ```
 
-2. `net/GameProtocol.h` and its hooks: the messages your server sends. The engine decodes the EzyFox frames and HTTP login itself, then hands your app commands and your HTTP answers to you.
+2. `net/GameProtocol.h`: the lists of messages your server sends, `GameHttpMessages` and `GameAppMessages` (`vibe::net::MessageList<...>` of your structs). They join the engine's messages in one flat `vibe::net::InboundMessage` variant. The sample's `src/net/GameProtocol.h` has empty lists.
 
-| Hook | What it does |
+## Network
+
+The engine decodes the EzyFox frames and the ezylogin and game master HTTP answers itself. Your game adds three things, each one object per command, so a new command never touches a central `if` chain.
+
+**A `vibe::net::Protocol`**, given to every `Session`, says how to decode your commands. Build it once and keep it alive as long as the sessions:
+
+```cpp
+const vibe::net::Protocol& protocol() {
+    static const vibe::net::Protocol instance = [] {
+        vibe::net::Protocol p;
+        p.command<Moved>("moved", [](const Json& data, Moved& out) {
+            const Json* x = field(data, "x");
+            return x && readFloat(*x, out.x) ? DecodeResult::ok() : DecodeResult::malformed("moved: bad x");
+        });
+        p.command("chat", decodeChat);  // DecodeResult(const Json&, InboundMessage&)
+        p.http(kScoreStep, "score", [](const vibe::net::HttpAnswer& answer) { return decodeScore(answer); });
+        p.stream<Moved>([](Moved& queued, const Moved& incoming) {
+            if (queued.player != incoming.player) {
+                return false;
+            }
+            queued = incoming;
+            return true;
+        });
+        return p;
+    }();
+    return instance;
+}
+```
+
+| Call | What |
 |---|---|
-| `GameHttpMessages`, `GameAppMessages` (in `net/GameProtocol.h`) | `vibe::net::MessageList<...>` of your structs; they join the engine's `InboundMessage` variant |
-| `decodeGameCommand(command, payload, out, handled)` | Decodes one app command (`[appId, [command, data]]`) into `out`; set `handled = false` for one you do not know |
-| `decodeGameHttp(step, status, body, elapsedMs, firstPage)` | Decodes the answer to a `Session::requestApi(step, ...)` call; steps start at `vibe::net::gameHttpStep(0)` |
-| `gameHttpStepName(step)` | A short name for log lines |
-| `isStreamMessage(message)`, `coalesceStream(queued, incoming)` | High-rate messages (positions) where only the newest counts; the inbound queue replaces an older one in place |
+| `command<T>(name, decode)` | App command `[appId, [name, data]]` into your struct `T`; a result other than `ok()` drops it |
+| `command(name, decode)` | The same, with a decoder that fills the `InboundMessage` itself (one command, several types) |
+| `http(step, name, decode)` | The answer to a `Session::request` with this step; `name` is for log lines. Steps start at `vibe::net::gameHttpStep(0)` |
+| `stream<T>(merge)` | High-rate messages (positions) where only the newest counts: the inbound queue merges a newer one into the queued one when `merge` returns true |
 
-The sample's `src/net/GameProtocol.h` and `src/net/GameProtocol.cpp` are the empty versions. `vibe/net/DecodeSupport.h` has the JSON readers the engine's own decoders use (`readInt32`, `readName`, `field`, `failure`, ...).
+A command with no decoder arrives as `OtherAppCommand`. `vibe/net/DecodeSupport.h` has the JSON readers the engine's own decoders use (`readInt32`, `readName`, `field`, `drop`, `failure`, ...).
+
+**Handlers on `session.messages()`** receive the decoded messages by type: app commands once the session is ready, `SessionError` for an APP_REQUEST_ERROR, and every HTTP answer (`HttpGameServerList`, your HTTP structs, `HttpFailed` with its step). Each object subscribes to what it handles and keeps the returned `Subscription`; destroying it, or the `vibe::net::Subscriptions` list holding it, ends the subscription. Subscribing and unsubscribing from inside a handler is safe.
+
+```cpp
+class Hud {
+public:
+    explicit Hud(vibe::net::Session& session) {
+        subscriptions_ += session.messages().on(this, &Hud::onScore);
+        subscriptions_ += session.messages().on<Moved>([this](const Moved& moved) { lastX_ = moved.x; });
+    }
+
+private:
+    void onScore(const Score& score);
+    vibe::net::Subscriptions subscriptions_;
+    float lastX_ = 0.0f;
+};
+```
+
+`messages().otherwise(handler)` receives the messages no typed handler took. `dispatch` returns whether a typed handler ran.
+
+**Request structs** for what your game sends:
+
+```cpp
+struct ChatRequest {
+    static constexpr const char* kCommand = "chat";
+    std::string_view message;
+    bool encode(std::string& data) const;  // JSON text; false cancels the send
+};
+
+struct ScoreRequest {
+    static constexpr vibe::net::HttpStep kStep = kScoreStep;
+    static constexpr const char* kMethod = "GET";
+    std::int64_t playerId = 0;
+    std::string path() const { return "/api/v1/scores/" + std::to_string(playerId); }
+};
+
+session.send(ChatRequest{"hi"});          // [31,[appId,["chat",{...}]]]
+session.request(ScoreRequest{42});        // the answer reaches messages()
+session.inFlight<ScoreRequest>();
+```
+
+| Member | For | What |
+|---|---|---|
+| `kCommand` | `send` | The app command name |
+| `encode(std::string&)` | `send`, optional | The data as JSON text; without it the data is `{}` |
+| `kStep`, `kMethod` | `request` | The HTTP step and method |
+| `kPath` or `path()` | `request` | Appended to the configs.json `http` URL; an empty path is not sent |
+| `body()`, `firstPage` | `request`, optional | A JSON body; `firstPage` is handed to the decoder in `HttpAnswer` |
+
+`Session::sendApp(command, json)`, `sendFrame(frame)` and `requestApi(step, method, path, body)` stay for a frame that does not fit a struct (a batch of inputs split over several frames).
 
 ## Scenes and the frame
 
@@ -91,12 +169,12 @@ The sample's `src/net/GameProtocol.h` and `src/net/GameProtocol.cpp` are the emp
 ## Logging in
 
 ```cpp
-vibe::net::Session session(config, listener);
+vibe::net::Session session(config, protocol(), listener);
 session.quickPlay();                 // anonymous account, or session.login(user, password)
-// listener.onLoggedIn()       -> session.requestGameServers()
-// listener.onHttpResult(list) -> session.selectServer(id)
-// listener.onSessionReady()   -> session.sendApp("command", "{...}")
-// listener.onAppMessage(msg)  -> your decoded app commands
+// listener.onLoggedIn()                    -> session.requestGameServers()
+// messages().on<HttpGameServerList>(...)   -> session.selectServer(id)
+// listener.onSessionReady()                -> session.send(JoinRequest{})
+// messages().on<YourMessage>(...)          -> your decoded app commands
 ```
 
 Release builds refuse `http://` and `ws://` server URLs; dev builds warn and continue.

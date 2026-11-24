@@ -7,6 +7,8 @@
 
 namespace vibe::net {
 
+class Protocol;
+
 // Decoders for every message the client reads. They never throw (exceptions
 // are off) and never abort: bad input is a Malformed result with a short
 // static reason, and the caller drops it with one rate-limited warning. They
@@ -36,7 +38,7 @@ struct DecodeResult {
 };
 
 // One WebSocket text frame, `[commandId, data]` or `[commandId]`.
-DecodeResult decodeSessionFrame(std::string_view text, InboundMessage& out);
+DecodeResult decodeSessionFrame(const Protocol& protocol, std::string_view text, InboundMessage& out);
 
 // POST /ezylogin/api/v1/login. `status` 0 is a network error or timeout.
 // Always produces a message: HttpLoginOk, HttpLoginNotActivated (a usable
@@ -66,9 +68,10 @@ InboundMessage decodeForgotPasswordResponse(int status, std::string_view body, d
 // A page token goes into a URL query; a longer one is ignored.
 inline constexpr std::size_t kMaxPageTokenBytes = 1024;
 
-InboundMessage decodeHttpResponse(HttpStep step, int status, std::string_view body, double elapsedMs, bool firstPage);
+InboundMessage decodeHttpResponse(const Protocol& protocol, HttpStep step, int status, std::string_view body,
+                                  double elapsedMs, bool firstPage);
 
-const char* httpStepName(HttpStep step);
+const char* httpStepName(const Protocol& protocol, HttpStep step);
 
 // Removes control characters and cuts `text` to at most `maxBytes` without
 // splitting a UTF-8 character. For text other players wrote (plan 12).

@@ -9,11 +9,9 @@
 
 #include "vibe/net/Encode.h"
 #include "vibe/net/Messages.h"
+#include "vibe/net/Protocol.h"
 
 namespace vibe::net {
-
-bool isStreamMessage(const InboundMessage& message);
-bool coalesceStream(InboundMessage& queued, const InboundMessage& incoming);
 
 // Bounded queues between the network callbacks and the frame
 // (docs/architecture.md, Network callbacks). One thread, so no lock; the
@@ -26,15 +24,15 @@ public:
     // A RoomPlayers message is about 5 KB, so 128 slots is about 640 KB.
     static constexpr std::size_t kCapacity = 128;
 
-    InboundQueue() : slots_(kCapacity) {}
+    explicit InboundQueue(const Protocol& protocol) : protocol_(&protocol), slots_(kCapacity) {}
 
     // `s` is coalesced: a newer pose for a player still in the queue replaces
     // the older one in place, so only the newest is drained. Returns false,
     // and sets overflowed(), when the queue is full.
     bool push(InboundMessage&& message) {
-        if (isStreamMessage(message)) {
+        if (protocol_->isStream(message)) {
             for (std::size_t i = 0; i < size_; ++i) {
-                if (coalesceStream(slots_[(head_ + i) % kCapacity], message)) {
+                if (protocol_->coalesce(slots_[(head_ + i) % kCapacity], message)) {
                     ++coalesced_;
                     return true;
                 }
@@ -72,8 +70,10 @@ public:
     std::size_t size() const { return size_; }
     bool overflowed() const { return overflowed_; }
     std::size_t coalescedCount() const { return coalesced_; }
+    const Protocol& protocol() const { return *protocol_; }
 
 private:
+    const Protocol* protocol_;
     std::vector<InboundMessage> slots_;
     std::size_t head_ = 0;
     std::size_t size_ = 0;

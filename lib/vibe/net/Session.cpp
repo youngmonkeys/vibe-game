@@ -76,8 +76,8 @@ const char* errorCommandName(Command command) {
 
 } // namespace
 
-Session::Session(SessionConfig config, SessionListener& listener)
-    : config_(std::move(config)), listener_(listener), http_(inbound_),
+Session::Session(SessionConfig config, const Protocol& protocol, SessionListener& listener)
+    : config_(std::move(config)), listener_(listener), inbound_(protocol), http_(inbound_),
       socket_(newSocketTransport(inbound_, config_.udpUsage)), udpPort_(config_.udpPort) {}
 
 const char* Session::stateName(State state) {
@@ -440,7 +440,7 @@ void Session::handle(InboundMessage& message) {
         return;
     }
     if (std::holds_alternative<HttpGameServerList>(message) || isGameHttpResult(message)) {
-        listener_.onHttpResult(message);
+        messages_.dispatch(message);
         return;
     }
     if (auto* ok = std::get_if<HttpLoginOk>(&message)) {
@@ -473,7 +473,7 @@ void Session::handle(InboundMessage& message) {
         return;
     }
     if (std::holds_alternative<HttpForgotPasswordOk>(message)) {
-        listener_.onHttpResult(message);
+        messages_.dispatch(message);
         return;
     }
     if (const auto* failed = std::get_if<HttpFailed>(&message)) {
@@ -492,11 +492,11 @@ void Session::handle(InboundMessage& message) {
                         failed->step == HttpFailed::Step::GameServers ? "game server list" : "server instances",
                         failed->reason.c_str());
             setState(State::ChooseServer, 0);
-            listener_.onHttpResult(message);
+            messages_.dispatch(message);
             return;
         }
         if (failed->step == HttpFailed::Step::ForgotPassword || isGameHttpStep(failed->step)) {
-            listener_.onHttpResult(message);
+            messages_.dispatch(message);
             return;
         }
         if (state_ != State::HttpLogin && state_ != State::Register) {
@@ -624,7 +624,7 @@ void Session::handle(InboundMessage& message) {
         if (state_ == State::Ready && error->command == Command::AppRequestError) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "session: %s", reason);
             // The match counts these next to its unanswered `h` (plan 09).
-            listener_.onAppMessage(message);
+            messages_.dispatch(message);
             return;
         }
         if (error->command == Command::LoginError) {
@@ -649,7 +649,7 @@ void Session::handle(InboundMessage& message) {
         outOfOrder_.warn("an app command", "the session is not ready");
         return;
     }
-    listener_.onAppMessage(message);
+    messages_.dispatch(message);
 }
 
 } // namespace vibe::net

@@ -114,7 +114,7 @@ vibe-game/
 │   └── web/                shell.html, shell.js, idbfs.js, manifest, icons; (planned) web server config (COOP/COEP headers)
 ├── shaders/                (planned) HLSL sources (*.vert.hlsl, *.frag.hlsl), compiled offline with SDL_shadercross
 ├── src/                    the game (here: the sample, one scene and a guest login)
-│   └── net/GameProtocol.h  the game's messages and protocol hooks
+│   └── net/GameProtocol.h  the game's message lists
 ├── tests/node/             tests for the math, the camera and the node tree
 ├── assets/                 runtime assets, packed as /assets (png, ogg, ttf, json)
 ├── config/configs.json     server addresses, packed as /config/configs.json
@@ -135,7 +135,7 @@ my-game/
 ├── CMakePresets.json       the same presets; the Windows toolchain path points into VIBE_GAME_DIR
 ├── src/                    game code only
 │   ├── <Game>.cpp          defines vibe::createGame()
-│   └── net/GameProtocol.h  GameHttpMessages, GameAppMessages + the protocol hooks (3.3)
+│   └── net/GameProtocol.h  GameHttpMessages, GameAppMessages (3.3)
 ├── platform/               only the files that replace an engine default (same relative path, e.g. web/icon-512.png)
 ├── assets/
 ├── config/
@@ -154,8 +154,8 @@ The engine is not copied into a game. A game points `VIBE_GAME_DIR` at this repo
 | Scenes | `vibe::Game::createInitialScene(const GameContext&)`, optional `audioCues`, `clearColor`, `onStart`, `update`, `flush`, `onQuit` | its own `vibe::Scene` subclasses |
 | Identity | `VIBE_APP_NAME`, `VIBE_APP_ORG`, `VIBE_APP_ID` (window title, log tag, prefs path, session key, user agent) | `vibe_add_game(<target> NAME ORG ID BUNDLE_ID ...)` |
 | Dev-only code | `lib/vibe/core/debug/`, `lib/vibe/ui/dev/`, `VIBE_DEV` | `DEV_DIRS` folders under `src/`, extra web exports in `WEB_DEV_EXPORTS` |
-| Network messages | core messages + the game's lists joined into one flat `vibe::net::InboundMessage` variant | `net/GameProtocol.h` with `decodeGameCommand`, `decodeGameHttp`, `gameHttpStepName`, `isStreamMessage`, `coalesceStream` |
-| HTTP | `Session::requestApi(step, method, path, body)` for steps from `vibe::net::gameHttpStep(0)` up | its step constants and decoders |
+| Network messages | core messages + the game's lists joined into one flat `vibe::net::InboundMessage` variant; `vibe::net::Protocol` maps app command names and HTTP steps to decoders; `Session::messages()` delivers each message to the handlers subscribed to its type | `net/GameProtocol.h` with the message lists, a `Protocol` passed to every `Session`, handlers on `session.messages()` |
+| Requests | `Session::send(request)` for app commands, `Session::request(request)` and `inFlight<Request>()` for HTTP steps from `vibe::net::gameHttpStep(0)` up | one struct per request: `kCommand` and `encode`, or `kStep`, `kMethod`, `kPath` or `path()`, `body()`, `firstPage` |
 | Platform files | `platform/` defaults with `@VIBE_APP_NAME@` placeholders | overrides in its own `platform/` |
 
 Folders marked (planned) do not exist yet; add them at that path when the engine needs them, so every game finds them in the same place.

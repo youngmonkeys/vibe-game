@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <type_traits>
 #include <variant>
 
 #include "vibe/net/CoreMessages.h"
@@ -25,6 +26,31 @@ struct JoinMessageLists<MessageList<Core...>, MessageList<Http...>, MessageList<
 
 using InboundMessages = JoinMessageLists<CoreMessages, GameHttpMessages, GameAppMessages>;
 using InboundMessage = InboundMessages::Variant;
+
+inline constexpr std::size_t kInboundMessageCount = std::variant_size_v<InboundMessage>;
+
+template <class Message, class Variant>
+struct MessageIndex;
+
+template <class Message, class... Types>
+struct MessageIndex<Message, std::variant<Types...>> {
+    static constexpr std::size_t find() {
+        constexpr bool matches[] = {std::is_same_v<Message, Types>...};
+        for (std::size_t i = 0; i < sizeof...(Types); ++i) {
+            if (matches[i]) {
+                return i;
+            }
+        }
+        return sizeof...(Types);
+    }
+    static constexpr std::size_t value = find();
+};
+
+template <class Message>
+inline constexpr std::size_t messageIndex = MessageIndex<Message, InboundMessage>::value;
+
+template <class Message>
+inline constexpr bool isInboundMessage = messageIndex<Message> < kInboundMessageCount;
 
 inline bool isGameHttpResult(const InboundMessage& message) {
     return message.index() >= InboundMessages::kFirstHttp && message.index() < InboundMessages::kFirstApp;

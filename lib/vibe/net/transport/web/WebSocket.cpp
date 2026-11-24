@@ -181,13 +181,13 @@ void WebSocketTransport::onMessage(int socket, const unsigned char* data, unsign
     }
     InboundMessage message;
     const DecodeResult result =
-        decodeSessionFrame(std::string_view(reinterpret_cast<const char*>(data), size), message);
+        decodeSessionFrame(inbound_.protocol(), std::string_view(reinterpret_cast<const char*>(data), size), message);
     if (result.status == DecodeStatus::Malformed) {
         malformed_.warn("a malformed frame", result.reason);
         return;
     }
     if (result.status == DecodeStatus::Ok) {
-        if (isStreamMessage(message)) {
+        if (inbound_.protocol().isStream(message)) {
             ++traffic_.streamIn;
         }
         inbound_.push(std::move(message));

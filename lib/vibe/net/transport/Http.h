@@ -51,7 +51,7 @@ public:
 
     // A request with header `accessToken` for a game step (isGameHttpStep).
     // `jsonBody`, when not empty, is sent as application/json. `firstPage` is
-    // passed to decodeGameHttp. Pushes that step's message or HttpFailed.
+    // passed to the step's Protocol decoder. Pushes that step's message or HttpFailed.
     void request(HttpStep step, const char* method, const std::string& url, const std::string& accessToken,
                  std::string jsonBody = {}, bool firstPage = true);
 
@@ -62,6 +62,7 @@ public:
     struct Request;
     // Called by the fetch completion callback only.
     void deliver(Request* request, InboundMessage&& message);
+    const Protocol& protocol() const { return inbound_.protocol(); }
 
 private:
     void start(Request* request, const char* method);

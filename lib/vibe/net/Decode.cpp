@@ -9,6 +9,7 @@
 #include <string>
 
 #include "vibe/net/DecodeSupport.h"
+#include "vibe/net/Protocol.h"
 #include "vibe/net/Url.h"
 
 namespace vibe::net {
@@ -285,7 +286,7 @@ std::string sanitizeShownText(std::string_view text, std::size_t maxBytes) {
 
 namespace {
 
-DecodeResult decodeAppRequest(const Json& data, InboundMessage& out) {
+DecodeResult decodeAppRequest(const Protocol& protocol, const Json& data, InboundMessage& out) {
     // [appId, [command, data]]
     if (!data.is_array() || data.size() != 2 || !data[0].is_number_integer()) {
         return drop(out, "APP_REQUEST: not [appId, [command, data]]");
@@ -297,10 +298,8 @@ DecodeResult decodeAppRequest(const Json& data, InboundMessage& out) {
     const auto& command = inner[0].get_ref<const std::string&>();
     static const Json kNull;
     const Json& payload = inner.size() == 2 ? inner[1] : kNull;
-    bool handled = true;
-    const DecodeResult result = decodeGameCommand(command, payload, out, handled);
-    if (handled) {
-        return result;
+    if (const Protocol::CommandDecoder* decoder = protocol.findCommand(command)) {
+        return (*decoder)(payload, out);
     }
     auto& other = out.emplace<OtherAppCommand>();
     if (hasControlChar(command) || !other.command.assign(command)) {
@@ -332,7 +331,7 @@ DecodeResult decodeError(Command command, const Json& data, InboundMessage& out)
 
 } // namespace
 
-DecodeResult decodeSessionFrame(std::string_view text, InboundMessage& out) {
+DecodeResult decodeSessionFrame(const Protocol& protocol, std::string_view text, InboundMessage& out) {
     if (text.size() > kMaxInboundFrameBytes) {
         return drop(out, "frame larger than the inbound cap");
     }
@@ -387,7 +386,7 @@ DecodeResult decodeSessionFrame(std::string_view text, InboundMessage& out) {
         return DecodeResult::ok();
     }
     case Command::AppRequest:
-        return decodeAppRequest(data, out);
+        return decodeAppRequest(protocol, data, out);
     case Command::Pong:
         out = Pong{};
         return DecodeResult::ok();
@@ -574,7 +573,8 @@ InboundMessage decodeForgotPasswordResponse(int status, std::string_view body, d
     return HttpForgotPasswordOk{};
 }
 
-InboundMessage decodeHttpResponse(HttpStep step, int status, std::string_view body, double elapsedMs, bool firstPage) {
+InboundMessage decodeHttpResponse(const Protocol& protocol, HttpStep step, int status, std::string_view body,
+                                  double elapsedMs, bool firstPage) {
     switch (step) {
     case HttpStep::Login: return decodeLoginResponse(status, body, elapsedMs);
     case HttpStep::GameServers: return decodeGameServerListResponse(status, body, elapsedMs);
@@ -582,10 +582,13 @@ InboundMessage decodeHttpResponse(HttpStep step, int status, std::string_view bo
     case HttpStep::Register: return decodeRegisterResponse(status, body, elapsedMs);
     case HttpStep::ForgotPassword: return decodeForgotPasswordResponse(status, body, elapsedMs);
     }
-    return decodeGameHttp(step, status, body, elapsedMs, firstPage);
+    if (const Protocol::HttpDecoder* decoder = protocol.findHttp(step)) {
+        return (*decoder)(HttpAnswer{step, status, body, elapsedMs, firstPage});
+    }
+    return failure(step, status, elapsedMs, "no decoder for this HTTP step");
 }
 
-const char* httpStepName(HttpStep step) {
+const char* httpStepName(const Protocol& protocol, HttpStep step) {
     switch (step) {
     case HttpStep::Login: return "login";
     case HttpStep::GameServers: return "game servers";
@@ -593,7 +596,7 @@ const char* httpStepName(HttpStep step) {
     case HttpStep::Register: return "register";
     case HttpStep::ForgotPassword: return "forgot password";
     }
-    return gameHttpStepName(step);
+    return protocol.httpName(step);
 }
 
 } // namespace vibe::net

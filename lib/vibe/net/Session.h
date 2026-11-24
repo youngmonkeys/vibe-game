@@ -1,11 +1,15 @@
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
+#include "vibe/net/MessageDispatcher.h"
 #include "vibe/net/Messages.h"
+#include "vibe/net/Protocol.h"
 #include "vibe/net/Queues.h"
 #include "vibe/net/WarnLimiter.h"
 #include "vibe/net/transport/Http.h"
@@ -40,15 +44,6 @@ public:
     // log: it never holds a token, the password, or a header, but may hold
     // the server's own text. `message` is the short general line to show.
     virtual void onSessionFailed(const std::string& /*reason*/, const std::string& /*message*/) {}
-    // A decoded app command (JoinLobby, PlayerPose, ...), once ready. An
-    // APP_REQUEST_ERROR while ready also comes here, as a SessionError.
-    virtual void onAppMessage(const InboundMessage& /*message*/) {}
-    // The answer to requestGameServers(), requestForgotPassword() or
-    // requestApi(): HttpGameServerList, HttpForgotPasswordOk, a game HTTP
-    // message (isGameHttpResult), or HttpFailed with that step. A selectServer() that found no usable
-    // instance also ends here, as HttpFailed with step ServerInstances, and
-    // the session is back in ChooseServer.
-    virtual void onHttpResult(const InboundMessage& /*message*/) {}
 };
 
 // Login and the EzyFox session (plan 06): HTTP login, the game server the
@@ -91,7 +86,16 @@ public:
     static constexpr int kPingPeriodMs = 5000;
     static constexpr int kMatchPingPeriodMs = 1000;
 
-    Session(SessionConfig config, SessionListener& listener);
+    Session(SessionConfig config, const Protocol& protocol, SessionListener& listener);
+
+    // Decoded app commands (JoinLobby, PlayerPose, ...) once ready, an
+    // APP_REQUEST_ERROR while ready (SessionError), and the answers to
+    // requestGameServers(), requestForgotPassword() and request():
+    // HttpGameServerList, HttpForgotPasswordOk, a game HTTP message, or
+    // HttpFailed with that step. A selectServer() that found no usable
+    // instance also ends here, as HttpFailed with step ServerInstances, and
+    // the session is back in ChooseServer.
+    MessageDispatcher& messages() { return messages_; }
 
     // HTTP login, then onLoggedIn(). The password is used for the form body
     // and then wiped. Returns false (and reports onSessionFailed) when it
@@ -109,7 +113,7 @@ public:
     bool resumeStored();
 
     // Plan 11: POST forgot-password with this email. The answer arrives
-    // through onHttpResult (HttpForgotPasswordOk or HttpFailed). Needs no
+    // through messages() (HttpForgotPasswordOk or HttpFailed). Needs no
     // login. Returns false when one is still running or the URL is refused.
     bool requestForgotPassword(std::string_view email);
     bool forgotPasswordInFlight() const { return http_.inFlight(HttpFailed::Step::ForgotPassword); }
@@ -123,13 +127,13 @@ public:
     void openActivationPage();
 
     // After onLoggedIn(): the RUNNING game servers, answered through
-    // onHttpResult. Returns false when not logged in or one is running.
+    // messages(). Returns false when not logged in or one is running.
     bool requestGameServers();
     bool gameServersInFlight() const { return http_.inFlight(HttpFailed::Step::GameServers); }
 
     // After onLoggedIn(): asks for the game server's available lobby
     // instances and dials the first one (configs.json's WebSocket URL when it
-    // has none). onSessionReady or onSessionFailed follows, or onHttpResult
+    // has none). onSessionReady or onSessionFailed follows, or an HttpFailed
     // with step ServerInstances when the server has no usable instance.
     bool selectServer(std::int64_t serverId);
     // The game server picked, or 0.
@@ -151,7 +155,7 @@ public:
     // kept from the login. `path` is appended to the configs.json `http` URL
     // ("/api/v1/balance"). Returns false, and starts nothing, when there is no
     // token or a call of that step is still running. The answer arrives
-    // through onHttpResult.
+    // through messages().
     bool requestApi(HttpStep step, const char* method, std::string_view path, std::string jsonBody = {},
                     bool firstPage = true);
     bool apiInFlight(HttpStep step) const { return http_.inFlight(step); }
@@ -167,6 +171,45 @@ public:
 
     // Queues one app request. `dataJson` is JSON text, "{}" for none.
     bool sendApp(std::string_view command, std::string_view dataJson);
+
+    template <class Request>
+    bool send(const Request& request) {
+        if constexpr (requires(const Request& r, std::string& data) {
+                          { r.encode(data) } -> std::convertible_to<bool>;
+                      }) {
+            std::string data;
+            return request.encode(data) && sendApp(Request::kCommand, data);
+        } else {
+            return sendApp(Request::kCommand, "{}");
+        }
+    }
+
+    template <class Request>
+    bool request(const Request& call) {
+        std::string path;
+        if constexpr (requires(const Request& r) { r.path(); }) {
+            path = call.path();
+        } else {
+            path = Request::kPath;
+        }
+        if (path.empty()) {
+            return false;
+        }
+        std::string body;
+        if constexpr (requires(const Request& r) { r.body(); }) {
+            body = call.body();
+        }
+        bool firstPage = true;
+        if constexpr (requires(const Request& r) { r.firstPage; }) {
+            firstPage = call.firstPage;
+        }
+        return requestApi(Request::kStep, Request::kMethod, path, std::move(body), firstPage);
+    }
+
+    template <class Request>
+    bool inFlight() const {
+        return apiInFlight(Request::kStep);
+    }
 
     // Queues one already encoded session frame (for example an app request
     // built without a JSON parse). False when not ready, over 2048 bytes, or
@@ -214,6 +257,7 @@ private:
 
     SessionConfig config_;
     SessionListener& listener_;
+    MessageDispatcher messages_;
     InboundQueue inbound_;
     OutboundQueue outbound_;
     HttpClient http_;

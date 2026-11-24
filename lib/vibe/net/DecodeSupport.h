@@ -59,8 +59,4 @@ std::string shownText(const Json& object, const char* key, std::size_t maxBytes)
 void readPage(const Json& json, PageInfo& page);
 std::string numberText(const Json& value);
 
-DecodeResult decodeGameCommand(const std::string& command, const Json& payload, InboundMessage& out, bool& handled);
-InboundMessage decodeGameHttp(HttpStep step, int status, std::string_view body, double elapsedMs, bool firstPage);
-const char* gameHttpStepName(HttpStep step);
-
 } // namespace vibe::net

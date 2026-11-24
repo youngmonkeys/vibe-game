@@ -438,14 +438,14 @@ void TcpTransport::pushContent(std::uint8_t header, std::string& content, const 
     }
     ++traffic_.framesIn;
     InboundMessage message;
-    const DecodeResult result = decodeSessionFrame(inFrame_, message);
+    const DecodeResult result = decodeSessionFrame(inbound_.protocol(), inFrame_, message);
     wipe(inFrame_);
     if (result.status == DecodeStatus::Malformed) {
         malformed_.warn("a malformed frame", result.reason);
         return;
     }
     if (result.status == DecodeStatus::Ok) {
-        if (isStreamMessage(message)) {
+        if (inbound_.protocol().isStream(message)) {
             ++traffic_.streamIn;
         }
         inbound_.push(std::move(message));
