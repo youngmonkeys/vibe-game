@@ -28,6 +28,16 @@ inline constexpr float kDesignHeight = 720.0f;
 
 enum class Align { Left, Center, Right };
 
+struct TextStyle {
+    FontFace face = FontFace::Body;
+    float size = 16.0f;
+    Color color = palette::kCream;
+    Align align = Align::Left;
+    float maxWidth = 0.0f;
+    float wrapWidth = 0.0f;
+    bool shadow = false;
+};
+
 // Icons from assets/ui/ (plan 04). The single-color ones are loaded as
 // white masks and tinted; the art ones keep their colors (tint white).
 // The UI's icons (2026-10-22): assets/ui/art/, made by tools/gen_ui_art.py in
@@ -149,16 +159,11 @@ public:
     // A rectangle of design units, centered in the safe area.
     ScreenRect centered(float widthUnits, float heightUnits) const;
 
-    // Text at a size in design units. `x` is the left edge, the center, or
-    // the right edge by `align`; `y` is the top.
-    TextSize text(FontFace face, float sizeUnits, std::string_view text, float x, float y, Color color,
-                  Align align = Align::Left);
-    // As text(), but the size shrinks so the line fits `maxWidth` pixels.
-    TextSize fitText(FontFace face, float sizeUnits, std::string_view text, float x, float y, float maxWidth,
-                     Color color, Align align = Align::Left);
-    // Wrapped at `wrapWidth` pixels. Returns the height used.
-    float paragraph(FontFace face, float sizeUnits, std::string_view text, float x, float y, float wrapWidth,
-                    Color color);
+    // Text at `style.size` design units. `x` is the left edge, the center, or
+    // the right edge by `style.align`; `y` is the top. A `maxWidth` shrinks
+    // the line to fit, a `wrapWidth` wraps it, and `shadow` puts a soft dark
+    // shadow under it.
+    TextSize text(std::string_view text, float x, float y, const TextStyle& style);
     void panel(const ScreenRect& rect);
 
     // Loads the icons once (logs a missing file; that icon draws nothing).

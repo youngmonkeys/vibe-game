@@ -47,8 +47,8 @@ void RotateScreen::draw(Ui& ui) {
         c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     }
     hint += " PLAYS IN LANDSCAPE";
-    ui.text(FontFace::Body, 16.0f * k, hint.c_str(), cx, cy + longSide * 0.5f + 80.0f * px, palette::kMuted,
-            Align::Center);
+    ui.text(hint.c_str(), cx, cy + longSide * 0.5f + 80.0f * px,
+            {.size = 16.0f * k, .color = palette::kMuted, .align = Align::Center});
     ui.mark("rotate.screen", safe);
 }
 

@@ -72,32 +72,29 @@ int Ui::fontPx(float sizeUnits) const {
     return std::max(8, static_cast<int>(std::lround(sizeUnits * scale_)));
 }
 
-TextSize Ui::text(FontFace face, float sizeUnits, std::string_view text, float x, float y, Color color, Align align) {
-    const int px = fontPx(sizeUnits);
-    if (align != Align::Left) {
-        const TextSize size = text_.measure(face, px, text);
-        x -= align == Align::Center ? static_cast<float>(size.w) * 0.5f : static_cast<float>(size.w);
-    }
-    return text_.draw(face, px, text, std::round(x), std::round(y), color);
-}
-
-TextSize Ui::fitText(FontFace face, float sizeUnits, std::string_view text, float x, float y, float maxWidth,
-                     Color color, Align align) {
-    const TextSize size = text_.measure(face, fontPx(sizeUnits), text);
-    if (size.w > 0 && static_cast<float>(size.w) > maxWidth && maxWidth > 0.0f) {
-        sizeUnits *= maxWidth / static_cast<float>(size.w);
-    }
-    return this->text(face, sizeUnits, text, x, y, color, align);
-}
-
-float Ui::paragraph(FontFace face, float sizeUnits, std::string_view text, float x, float y, float wrapWidth,
-                    Color color) {
+TextSize Ui::text(std::string_view text, float x, float y, const TextStyle& style) {
     if (text.empty()) {
-        return 0.0f;
+        return TextSize{};
     }
-    const TextSize size = text_.draw(face, fontPx(sizeUnits), text, std::round(x), std::round(y), color,
-                                     std::max(1, static_cast<int>(wrapWidth)));
-    return static_cast<float>(size.h);
+    const int wrapPx = style.wrapWidth > 0.0f ? std::max(1, static_cast<int>(style.wrapWidth)) : 0;
+    int px = fontPx(style.size);
+    if (style.maxWidth > 0.0f) {
+        const TextSize size = text_.measure(style.face, px, text, wrapPx);
+        if (size.w > 0 && static_cast<float>(size.w) > style.maxWidth) {
+            px = fontPx(style.size * style.maxWidth / static_cast<float>(size.w));
+        }
+    }
+    if (style.align != Align::Left) {
+        const TextSize size = text_.measure(style.face, px, text, wrapPx);
+        x -= style.align == Align::Center ? static_cast<float>(size.w) * 0.5f : static_cast<float>(size.w);
+    }
+    x = std::round(x);
+    y = std::round(y);
+    if (style.shadow) {
+        const float o = std::max(1.0f, u(2.0f));
+        text_.draw(style.face, px, text, x + o, y + o, Color{0, 0, 0, 170}, wrapPx);
+    }
+    return text_.draw(style.face, px, text, x, y, style.color, wrapPx);
 }
 
 void Ui::panel(const ScreenRect& rect) {
@@ -404,8 +401,8 @@ void Button::draw(Ui& ui, const ScreenRect& rect, ButtonStyle style, float textU
     if (style == ButtonStyle::Link) {
         // Text only: gold, lighter and underlined on hover.
         const Color c = !enabled_ ? palette::kDim : hover_ ? palette::kGoldLight : palette::kGold;
-        const TextSize ts = ui.fitText(FontFace::Body, textUnits, label_, rect.x + rect.w * 0.5f, y + lip, rect.w, c,
-                                       Align::Center);
+        const TextSize ts = ui.text(label_, rect.x + rect.w * 0.5f, y + lip,
+                                    {.size = textUnits, .color = c, .align = Align::Center, .maxWidth = rect.w});
         if (hover_ && enabled_) {
             ui.renderer().fillScreenRect(ScreenRect{rect.x + (rect.w - static_cast<float>(ts.w)) * 0.5f,
                                                     y + lip + static_cast<float>(ts.h) - ui.u(1.0f),
@@ -431,13 +428,17 @@ void Button::draw(Ui& ui, const ScreenRect& rect, ButtonStyle style, float textU
     }
     if (enabled_ && style != ButtonStyle::Gold) {
         // Light text gets a dark shadow; dark text on gold gets a light one.
-        ui.fitText(FontFace::Title, textUnits, label_, rect.x + rect.w * 0.5f + ui.u(1.5f), y + ui.u(1.5f),
-                   rect.w - rect.h, Color{0, 0, 0, 150}, Align::Center);
+        ui.text(label_, rect.x + rect.w * 0.5f + ui.u(1.5f), y + ui.u(1.5f),
+                {.face = FontFace::Title, .size = textUnits, .color = Color{0, 0, 0, 150}, .align = Align::Center,
+                 .maxWidth = rect.w - rect.h});
     } else if (enabled_) {
-        ui.fitText(FontFace::Title, textUnits, label_, rect.x + rect.w * 0.5f, y + ui.u(1.5f), rect.w - rect.h,
-                   Color{255, 246, 210, 150}, Align::Center);
+        ui.text(label_, rect.x + rect.w * 0.5f, y + ui.u(1.5f),
+                {.face = FontFace::Title, .size = textUnits, .color = Color{255, 246, 210, 150}, .align = Align::Center,
+                 .maxWidth = rect.w - rect.h});
     }
-    ui.fitText(FontFace::Title, textUnits, label_, rect.x + rect.w * 0.5f, y, rect.w - rect.h, color, Align::Center);
+    ui.text(label_, rect.x + rect.w * 0.5f, y,
+            {.face = FontFace::Title, .size = textUnits, .color = color, .align = Align::Center,
+             .maxWidth = rect.w - rect.h});
 }
 
 // ---- TextField --------------------------------------------------------------
@@ -540,7 +541,8 @@ void TextField::draw(Ui& ui, const ScreenRect& rect) {
     }
     if (text_.empty()) {
         if (!focused) {
-            ui.fitText(FontFace::Body, size, placeholder_, rect.x + pad, y, rect.w - pad - right, palette::kDim);
+            ui.text(placeholder_, rect.x + pad, y,
+                    {.size = size, .color = palette::kDim, .maxWidth = rect.w - pad - right});
         }
     } else {
         // Re-built only when the text changed, so the cache key is stable.
@@ -561,7 +563,7 @@ void TextField::draw(Ui& ui, const ScreenRect& rect) {
         const float x = rect.x + pad - std::max(0.0f, static_cast<float>(shown.w) - room);
         const float clipLeft = hasIcon_ ? pad - ui.u(4.0f) : pad * 0.5f;
         r.setScreenClip(ScreenRect{rect.x + clipLeft, rect.y, rect.w - clipLeft - right * 0.5f, rect.h});
-        ui.text(FontFace::Body, size, shown_, x, y, palette::kCream);
+        ui.text(shown_, x, y, {.size = size, .color = palette::kCream});
         r.clearScreenClip();
         caretX = x + static_cast<float>(shown.w) + ui.u(2.0f);
     }

@@ -178,8 +178,9 @@ void pill(Ui& ui, const ScreenRect& rect, std::string_view text, bool gold, floa
     // with cream text otherwise.
     ui.frame(gold ? Frame::CardGold : Frame::Card, rect);
     const float textH = static_cast<float>(ui.textCache().lineHeight(FontFace::Body, ui.fontPx(sizeUnits)));
-    ui.fitText(FontFace::Body, sizeUnits, text, rect.x + rect.w * 0.5f, rect.y + (rect.h - textH) * 0.5f,
-               rect.w - ui.u(16.0f), gold ? palette::kGoldLight : palette::kCream, Align::Center);
+    ui.text(text, rect.x + rect.w * 0.5f, rect.y + (rect.h - textH) * 0.5f,
+            {.size = sizeUnits, .color = gold ? palette::kGoldLight : palette::kCream, .align = Align::Center,
+             .maxWidth = rect.w - ui.u(16.0f)});
 }
 
 void banner(Ui& ui, const ScreenRect& rect, std::string_view text, Color color) {
@@ -203,8 +204,8 @@ void banner(Ui& ui, const ScreenRect& rect, std::string_view text, Color color) 
             return;
         }
     }
-    ui.fitText(FontFace::Body, size, text, rect.x + rect.w * 0.5f, rect.y + (rect.h - textH) * 0.5f, room, color,
-               Align::Center);
+    ui.text(text, rect.x + rect.w * 0.5f, rect.y + (rect.h - textH) * 0.5f,
+            {.size = size, .color = color, .align = Align::Center, .maxWidth = room});
 }
 
 void buttonFace(Ui& ui, const ScreenRect& rect, ButtonStyle style, bool hover, bool pressed, bool enabled) {
@@ -249,20 +250,6 @@ ScreenRect pixelFit(const ScreenRect& rect, float artW, float artH) {
 
 ScreenRect roundSprite(const ScreenRect& rect) {
     return pixelFit(rect, kRoundArtWidth, kRoundArtHeight);
-}
-
-TextSize shadowText(Ui& ui, FontFace face, float sizeUnits, std::string_view text, float x, float y, Color color,
-                    bool centered) {
-    TextCache& tc = ui.textCache();
-    const int px = ui.fontPx(sizeUnits);
-    if (centered) {
-        x -= static_cast<float>(tc.measure(face, px, text).w) * 0.5f;
-    }
-    x = std::round(x);
-    y = std::round(y);
-    const float o = std::max(1.0f, ui.u(2.0f));
-    tc.draw(face, px, text, x + o, y + o, Color{0, 0, 0, 170});
-    return tc.draw(face, px, text, x, y, color);
 }
 
 void avatar(Ui& ui, float cx, float cy, float radius, bool gold) {
@@ -353,8 +340,9 @@ void levelBadge(Ui& ui, float cx, float cy, float radius, std::string_view level
     const float units = radius / ui.scale() * 1.3f;
     const float textH = static_cast<float>(ui.textCache().lineHeight(FontFace::Title, ui.fontPx(units)));
     const float p = art.w / kLevelArtWidth;
-    ui.fitText(FontFace::Title, units, level, art.x + art.w * 0.5f, std::round(art.y + (art.h - textH) * 0.5f),
-               art.w - p * 5.0f, Color{70, 40, 8, 255}, Align::Center);
+    ui.text(level, art.x + art.w * 0.5f, std::round(art.y + (art.h - textH) * 0.5f),
+            {.face = FontFace::Title, .size = units, .color = Color{70, 40, 8, 255}, .align = Align::Center,
+             .maxWidth = art.w - p * 5.0f});
 }
 
 void progressBar(Ui& ui, const ScreenRect& rect, float fraction, Color top, Color bottom) {

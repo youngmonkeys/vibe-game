@@ -75,9 +75,6 @@ ScreenRect pixelFit(const ScreenRect& rect, float artW, float artH);
 // The round button's art in `rect` (buttons are laid out 42 x 46: 2 canvas
 // pixels per art pixel at 1280 x 720).
 ScreenRect roundSprite(const ScreenRect& rect);
-// Text with a soft dark shadow under it, centered on `cx` when `centered`.
-TextSize shadowText(Ui& ui, FontFace face, float sizeUnits, std::string_view text, float x, float y, Color color,
-                    bool centered);
 // The pixel avatar ring with the user glyph on its grid (the player badge).
 void avatar(Ui& ui, float cx, float cy, float radius, bool gold);
 
