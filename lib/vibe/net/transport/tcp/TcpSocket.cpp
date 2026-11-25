@@ -39,7 +39,7 @@ constexpr bool kDevBuild = true;
 constexpr bool kDevBuild = false;
 #endif
 
-constexpr bool kRequireSignedTcpHandshake = false;
+constexpr bool kRequireSignedTcpHandshake = true;
 constexpr bool kAllowPlainSecrets = kDevBuild;
 constexpr bool kAllowUnverifiedServer = kDevBuild || !kRequireSignedTcpHandshake;
 
