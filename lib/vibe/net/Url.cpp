@@ -185,6 +185,9 @@ bool checkLoginUrls(std::string_view httpUrl, std::string_view masterUrl, std::s
     const Item items[] = {{"http", httpUrl, false}, {"master", masterUrl, false}, {"WebSocket", socketUrl, true}};
     // First pass: anything that is wrong in every build.
     for (const Item& item : items) {
+        if (item.webSocket && item.url.empty()) {
+            continue;
+        }
         std::string error;
         const bool ok = item.webSocket ? checkSocketUrl(item.url, false, error) : checkHttpUrl(item.url, false, error);
         if (!ok) {
@@ -194,6 +197,9 @@ bool checkLoginUrls(std::string_view httpUrl, std::string_view masterUrl, std::s
     }
     // Second pass: insecure schemes.
     for (const Item& item : items) {
+        if (item.webSocket && item.url.empty()) {
+            continue;
+        }
         std::string error;
         const bool ok = item.webSocket ? checkSocketUrl(item.url, true, error) : checkHttpUrl(item.url, true, error);
         if (!ok) {

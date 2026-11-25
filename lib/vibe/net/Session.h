@@ -23,8 +23,8 @@ struct SessionConfig {
     std::string masterUrl;
     std::string zoneName;
     std::string appName;
-    // socket.webSocketUrl (web) or socket.tcpUrl (macOS): dialed only when the
-    // picked game server's first instance has no URL for this build.
+    // webSocketUrl (web) or tcpUrl (native), optional: when set, dialed
+    // instead of the picked instance's URL.
     std::string socketUrl;
     bool udpUsage = false;
     int udpPort = 0;
@@ -240,6 +240,7 @@ public:
 
     // The instance this session dialed, for a redial (plan 19).
     const std::string& connectedWebSocketUrl() const { return connectedUrl_; }
+    const std::string& instanceWebSocketUrl() const { return instanceUrl_; }
     // The in-zone user name (USER#<id>), the playerName of game commands.
     const PlayerName& userName() const { return userName_; }
     int appId() const { return appId_; }
@@ -270,6 +271,7 @@ private:
     std::string socketAccessToken_;
     std::string activationUrl_;
     std::string connectedUrl_;
+    std::string instanceUrl_;
     std::int64_t serverId_ = 0;
     std::int64_t instanceId_ = 0;
     PlayerName userName_;

@@ -7,7 +7,9 @@ vibe_add_game(VibeGame
     NAME VibeGame
     ORG youngmonkeys
     ID vibegame
-    BUNDLE_ID org.youngmonkeys.vibegame)
+    BUNDLE_ID org.youngmonkeys.vibegame
+    ZONE game
+    APP vibegame)
 
 if(VIBE_ANDROID OR VIBE_WINDOWS OR VIBE_IOS)
     return()

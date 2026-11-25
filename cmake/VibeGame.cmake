@@ -85,13 +85,14 @@ endfunction()
 # vibe_add_game(<target>
 #     NAME <window and app name> ORG <org for the prefs path> ID <short id, session storage key>
 #     BUNDLE_ID <reverse DNS id for macOS, iOS and Android>
+#     ZONE <EzyFox zone name> APP <EzyFox app name>
 #     [SOURCE_DIR <dir, default src>] [ASSETS_DIR <dir, default assets>] [PLATFORM_DIR <dir, default platform>]
 #     [DEV_DIRS <dirs under SOURCE_DIR compiled into dev builds only>...]
 #     [WEB_DEV_EXPORTS <extra C functions the dev page calls, like _my_dev_hook>...])
 function(vibe_add_game target)
-    cmake_parse_arguments(PARSE_ARGV 1 G "" "NAME;ORG;ID;BUNDLE_ID;SOURCE_DIR;ASSETS_DIR;PLATFORM_DIR"
+    cmake_parse_arguments(PARSE_ARGV 1 G "" "NAME;ORG;ID;BUNDLE_ID;ZONE;APP;SOURCE_DIR;ASSETS_DIR;PLATFORM_DIR"
         "DEV_DIRS;WEB_DEV_EXPORTS")
-    foreach(required NAME ORG ID BUNDLE_ID)
+    foreach(required NAME ORG ID BUNDLE_ID ZONE APP)
         if(NOT G_${required})
             message(FATAL_ERROR "vibe_add_game(${target}): ${required} is required")
         endif()
@@ -138,7 +139,8 @@ function(vibe_add_game target)
     vibe_sim_flags(${target})
     target_include_directories(${target} PRIVATE "${G_SOURCE_DIR}" "${VIBE_LIB_DIR}")
     target_compile_definitions(${target} PRIVATE
-        VIBE_APP_NAME="${G_NAME}" VIBE_APP_ORG="${G_ORG}" VIBE_APP_ID="${G_ID}")
+        VIBE_APP_NAME="${G_NAME}" VIBE_APP_ORG="${G_ORG}" VIBE_APP_ID="${G_ID}"
+        VIBE_ZONE_NAME="${G_ZONE}" VIBE_SOCKET_APP_NAME="${G_APP}")
     target_link_libraries(${target} PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf nlohmann_json::nlohmann_json vibe_stb_vorbis)
     if(VIBE_DEV_BUILD)
         target_link_libraries(${target} PRIVATE vibe_imgui)

@@ -217,6 +217,7 @@ bool Session::switchInstance(const std::string& socketUrl) {
     socket_->abandon();
     outbound_.clear();
     disconnectReason_ = -1;
+    instanceUrl_ = socketUrl;
     return connectTo(socketUrl, socketAccessToken_);
 }
 
@@ -515,15 +516,19 @@ void Session::handle(InboundMessage& message) {
         SDL_Log("session: game server %lld, instance %lld on host %s", static_cast<long long>(serverId_),
                 static_cast<long long>(instance->instanceId), instance->host.c_str());
         instanceId_ = instance->instanceId;
-        udpPort_ = instance->udpPort > 0 ? instance->udpPort : config_.udpPort;
+        udpPort_ = config_.udpPort > 0 ? config_.udpPort : instance->udpPort;
 #ifdef __EMSCRIPTEN__
         const std::string& instanceUrl = instance->instanceWebSocketUrl;
 #else
         const std::string& instanceUrl = instance->instanceTcpUrl;
 #endif
-        if (instanceUrl.empty()) {
-            SDL_Log("session: the instance has no socket URL for this build; using configs.json");
+        instanceUrl_ = instance->instanceWebSocketUrl;
+        if (!config_.socketUrl.empty()) {
+            SDL_Log("session: dialing the socket URL from configs.json instead of the instance's");
             connectTo(config_.socketUrl, socketAccessToken_);
+        } else if (instanceUrl.empty()) {
+            fail("the game server instance has no socket URL for this build",
+                 "The game server is not available. Try again later.");
         } else {
             connectTo(instanceUrl, socketAccessToken_);
         }
@@ -610,7 +615,7 @@ void Session::handle(InboundMessage& message) {
                 socket_->udpConnect(udpPort_);
             } else {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                            "session: socket.udpUsage is on but there is no UDP port; `s` stays on TCP");
+                            "session: udpUsage is on but there is no UDP port; `s` stays on TCP");
             }
         }
 #endif

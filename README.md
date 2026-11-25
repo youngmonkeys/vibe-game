@@ -49,9 +49,24 @@ vibe_add_game(MyGame
     ORG mycompany                   # settings folder (SDL_GetPrefPath)
     ID mygame                       # browser session storage key
     BUNDLE_ID com.mycompany.mygame  # macOS, iOS, Android id
+    ZONE game                       # EzyFox zone the session logs in to
+    APP mygame                      # EzyFox app the session opens
     DEV_DIRS dev                    # folders under src/ compiled into dev builds only
     WEB_DEV_EXPORTS _my_dev_hook)   # extra C functions the dev web page calls
 ```
+
+`config/configs.json` holds only what changes per environment. `http` is required; the session reads the game servers and their instances (host, TCP port, UDP port, `websocketURL`) from the game master API.
+
+| Field | Required | Meaning |
+|---|---|---|
+| `http` | yes | Base URL of the web API, like `http://localhost:8080` or `https://mygame.example.com` |
+| `master` | no | Base URL of the game master API; defaults to `http` |
+| `webSocketUrl` (web), `tcpUrl` (native) | no | Dialed instead of the instance's URL, for a proxy, tunnel or NAT that the instance does not know about |
+| `udpPort` | no | Used instead of the instance's UDP port |
+| `udpUsage` | no | `true` adds the UDP channel on native builds; default `false` |
+| `autoLogin` | no | Start with the tokens a previous login stored; default `false` |
+
+Pick another file per build with `-DVIBE_CONFIG_FILE=<path>`.
 
 Every `.cpp` and `.mm` under `src/` is compiled. Put a file in `platform/` with the same path as one in the engine's `platform/` (for example `platform/web/icon-512.png` or `platform/web/shell.html`) to replace it for your game.
 

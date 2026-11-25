@@ -13,7 +13,7 @@ struct HostConfig {
     std::string zoneName;
     std::string appName;
     std::string socketUrl;
-    // socket.udpUsage, optional. Read only to say it is ignored: the web
+    // udpUsage, optional. Read only to say it is ignored: the web
     // client has no UDP, and every command uses the WebSocket (decision D15).
     bool udpUsage = false;
     int udpPort = 0;

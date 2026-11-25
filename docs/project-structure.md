@@ -152,7 +152,7 @@ The engine is not copied into a game. A game points `VIBE_GAME_DIR` at this repo
 |---|---|---|
 | Entry | `lib/vibe/sdl/main.cpp`, `vibe::App` | `std::unique_ptr<vibe::Game> vibe::createGame()` |
 | Scenes | `vibe::Game::createInitialScene(const GameContext&)`, optional `audioCues`, `clearColor`, `onStart`, `update`, `flush`, `onQuit`; `vibe::SceneStack` (`context.scenes`) with `push`, `replace`, `pop` | its own `vibe::Scene` subclasses |
-| Identity | `VIBE_APP_NAME`, `VIBE_APP_ORG`, `VIBE_APP_ID` (window title, log tag, prefs path, session key, user agent) | `vibe_add_game(<target> NAME ORG ID BUNDLE_ID ...)` |
+| Identity | `VIBE_APP_NAME`, `VIBE_APP_ORG`, `VIBE_APP_ID` (window title, log tag, prefs path, session key, user agent), `VIBE_ZONE_NAME`, `VIBE_SOCKET_APP_NAME` (EzyFox zone and app) | `vibe_add_game(<target> NAME ORG ID BUNDLE_ID ZONE APP ...)` |
 | Dev-only code | `lib/vibe/sdl/debug/`, `lib/vibe/ui/dev/`, `VIBE_DEV` | `DEV_DIRS` folders under `src/`, extra web exports in `WEB_DEV_EXPORTS` |
 | Network messages | core messages + the game's lists joined into one flat `vibe::net::InboundMessage` variant; `vibe::net::Protocol` maps app command names and HTTP steps to decoders; `Session::messages()` delivers each message to the handlers subscribed to its type | `net/GameProtocol.h` with the message lists, a `Protocol` passed to every `Session`, handlers on `session.messages()` |
 | Requests | `Session::send(request)` for app commands, `Session::request(request)` and `inFlight<Request>()` for HTTP steps from `vibe::net::gameHttpStep(0)` up | one struct per request: `kCommand` and `encode`, or `kStep`, `kMethod`, `kPath` or `path()`, `body()`, `firstPage` |
@@ -187,6 +187,8 @@ vibe_add_game(MyGame
     ORG mycompany
     ID mygame
     BUNDLE_ID com.mycompany.mygame
+    ZONE game
+    APP mygame
     DEV_DIRS dev
     WEB_DEV_EXPORTS _my_dev_hook)
 ```
