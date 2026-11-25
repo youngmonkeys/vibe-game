@@ -20,7 +20,6 @@ namespace vibe::net {
 // Where the session connects (the parts of configs.json it uses).
 struct SessionConfig {
     std::string httpUrl;
-    std::string masterUrl;
     std::string zoneName;
     std::string appName;
     // webSocketUrl (web) or tcpUrl (native), optional: when set, dialed

@@ -174,7 +174,7 @@ bool checkHttpUrl(std::string_view text, bool requireSecure, std::string& error)
     return checkScheme(text, "http", "https", requireSecure, error);
 }
 
-bool checkLoginUrls(std::string_view httpUrl, std::string_view masterUrl, std::string_view socketUrl,
+bool checkLoginUrls(std::string_view httpUrl, std::string_view socketUrl,
                     bool requireSecure, std::string& problem) {
     problem.clear();
     struct Item {
@@ -182,7 +182,7 @@ bool checkLoginUrls(std::string_view httpUrl, std::string_view masterUrl, std::s
         std::string_view url;
         bool webSocket;
     };
-    const Item items[] = {{"http", httpUrl, false}, {"master", masterUrl, false}, {"WebSocket", socketUrl, true}};
+    const Item items[] = {{"http", httpUrl, false}, {"WebSocket", socketUrl, true}};
     // First pass: anything that is wrong in every build.
     for (const Item& item : items) {
         if (item.webSocket && item.url.empty()) {

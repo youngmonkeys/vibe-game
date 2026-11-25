@@ -105,7 +105,7 @@ bool Session::login(std::string_view username, std::string& password) {
     }
     std::string problem;
     const bool allowed =
-        checkLoginUrls(config_.httpUrl, config_.masterUrl, config_.socketUrl, kRequireSecure, problem);
+        checkLoginUrls(config_.httpUrl, config_.socketUrl, kRequireSecure, problem);
     if (!allowed) {
         wipe(password);
         fail("refusing to log in: " + problem);
@@ -141,7 +141,7 @@ bool Session::quickPlay() {
         return false;
     }
     std::string problem;
-    if (!checkLoginUrls(config_.httpUrl, config_.masterUrl, config_.socketUrl, kRequireSecure, problem)) {
+    if (!checkLoginUrls(config_.httpUrl, config_.socketUrl, kRequireSecure, problem)) {
         fail("refusing to log in: " + problem);
         return false;
     }
@@ -164,7 +164,7 @@ bool Session::resumeStored() {
         return false;
     }
     std::string problem;
-    if (!checkLoginUrls(config_.httpUrl, config_.masterUrl, config_.socketUrl, kRequireSecure, problem)) {
+    if (!checkLoginUrls(config_.httpUrl, config_.socketUrl, kRequireSecure, problem)) {
         platform::wipe(tokens);
         fail("refusing to log in: " + problem);
         return false;
@@ -225,8 +225,8 @@ bool Session::requestGameServers() {
     if (state_ != State::ChooseServer || accessToken_.empty() || gameServersInFlight()) {
         return false;
     }
-    SDL_Log("session: listing game servers at %s", loggableUrl(config_.masterUrl).c_str());
-    http_.gameServers(config_.masterUrl, accessToken_);
+    SDL_Log("session: listing game servers at %s", loggableUrl(config_.httpUrl).c_str());
+    http_.gameServers(config_.httpUrl, accessToken_);
     return true;
 }
 
@@ -239,7 +239,7 @@ bool Session::selectServer(std::int64_t serverId) {
     instanceId_ = 0;
     SDL_Log("session: game server %lld picked; asking for its instances", static_cast<long long>(serverId));
     setState(State::ServerInstance, kHttpGuardMs);
-    http_.serverInstances(config_.masterUrl, accessToken_, serverId);
+    http_.serverInstances(config_.httpUrl, accessToken_, serverId);
     return true;
 }
 

@@ -67,19 +67,19 @@ void HttpClient::login(const std::string& httpUrl, std::string formBody) {
     start(request, "POST");
 }
 
-void HttpClient::gameServers(const std::string& masterUrl, const std::string& accessToken) {
+void HttpClient::gameServers(const std::string& httpUrl, const std::string& accessToken) {
     auto* request = new Request();
     request->step = HttpFailed::Step::GameServers;
-    request->url = masterUrl + "/api/v1/game-master-server/game-servers?limit=50";
+    request->url = httpUrl + "/api/v1/game-master-server/game-servers?limit=50";
     // Header `accessToken`, not `Authorization` (research/protocol.md).
     request->headers = {"accessToken", accessToken};
     start(request, "GET");
 }
 
-void HttpClient::serverInstances(const std::string& masterUrl, const std::string& accessToken, std::int64_t serverId) {
+void HttpClient::serverInstances(const std::string& httpUrl, const std::string& accessToken, std::int64_t serverId) {
     auto* request = new Request();
     request->step = HttpFailed::Step::ServerInstances;
-    request->url = masterUrl + "/api/v1/game-master-server/game-servers/" + std::to_string(serverId) +
+    request->url = httpUrl + "/api/v1/game-master-server/game-servers/" + std::to_string(serverId) +
                    "/instances?instanceType=LOBBY&status=AVAILABLE&limit=10";
     request->headers = {"accessToken", accessToken};
     start(request, "GET");

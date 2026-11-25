@@ -31,14 +31,14 @@ public:
     // HttpFailed.
     void login(const std::string& httpUrl, std::string formBody);
 
-    // GET {masterUrl}/api/v1/game-master-server/game-servers?limit=50 with
+    // GET {httpUrl}/api/v1/game-master-server/game-servers?limit=50 with
     // header `accessToken`. Pushes HttpGameServerList or HttpFailed.
-    void gameServers(const std::string& masterUrl, const std::string& accessToken);
+    void gameServers(const std::string& httpUrl, const std::string& accessToken);
 
-    // GET {masterUrl}/api/v1/game-master-server/game-servers/{serverId}/
+    // GET {httpUrl}/api/v1/game-master-server/game-servers/{serverId}/
     // instances?instanceType=LOBBY&status=AVAILABLE with header `accessToken`.
     // Pushes HttpServerInstance (the first one) or HttpFailed.
-    void serverInstances(const std::string& masterUrl, const std::string& accessToken, std::int64_t serverId);
+    void serverInstances(const std::string& httpUrl, const std::string& accessToken, std::int64_t serverId);
 
     // POST {httpUrl}/ezylogin/api/v1/anonymous/register (quick play).
     // Pushes HttpRegisterOk or HttpFailed.

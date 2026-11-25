@@ -9,7 +9,6 @@ namespace vibe {
 // Read from /config/configs.json in the preload package.
 struct HostConfig {
     std::string httpUrl;
-    std::string masterUrl;
     std::string zoneName;
     std::string appName;
     std::string socketUrl;

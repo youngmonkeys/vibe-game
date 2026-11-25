@@ -36,7 +36,7 @@ bool checkHttpUrl(std::string_view text, bool requireSecure, std::string& error)
 // `requireSecure` (release builds), http://, ws:// or tcp://
 // is refused: returns false and `problem` says which. Without it (dev builds),
 // an insecure URL returns true and `problem` holds a warning for the log.
-bool checkLoginUrls(std::string_view httpUrl, std::string_view masterUrl, std::string_view socketUrl,
+bool checkLoginUrls(std::string_view httpUrl, std::string_view socketUrl,
                     bool requireSecure, std::string& problem);
 
 // The allocation `websocketURL` has no path, and the server answers 404 on

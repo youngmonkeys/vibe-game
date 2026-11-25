@@ -55,12 +55,11 @@ vibe_add_game(MyGame
     WEB_DEV_EXPORTS _my_dev_hook)   # extra C functions the dev web page calls
 ```
 
-`config/configs.json` holds only what changes per environment. `http` is required; the session reads the game servers and their instances (host, TCP port, UDP port, `websocketURL`) from the game master API.
+`config/configs.json` holds only what changes per environment. `http` is required; the session reads the game servers and their instances (host, TCP port, UDP port, `websocketURL`) from the game master API at the same URL.
 
 | Field | Required | Meaning |
 |---|---|---|
 | `http` | yes | Base URL of the web API, like `http://localhost:8080` or `https://mygame.example.com` |
-| `master` | no | Base URL of the game master API; defaults to `http` |
 | `webSocketUrl` (web), `tcpUrl` (native) | no | Dialed instead of the instance's URL, for a proxy, tunnel or NAT that the instance does not know about |
 | `udpPort` | no | Used instead of the instance's UDP port |
 | `udpUsage` | no | `true` adds the UDP channel on native builds; default `false` |

@@ -74,13 +74,9 @@ bool parseHostConfig(std::string_view text, HostConfig& config, std::string& err
     parsed.zoneName = app_info::kZoneName;
     parsed.appName = app_info::kSocketAppName;
     if (!readUrl(root, "http", true, parsed.httpUrl, error) ||
-        !readUrl(root, "master", false, parsed.masterUrl, error) ||
         !readUrl(root, kSocketUrlKey, false, parsed.socketUrl, error) ||
         !readFlag(root, "udpUsage", parsed.udpUsage, error) || !readFlag(root, "autoLogin", parsed.autoLogin, error)) {
         return false;
-    }
-    if (parsed.masterUrl.empty()) {
-        parsed.masterUrl = parsed.httpUrl;
     }
     if (const auto udpPort = root.find("udpPort"); udpPort != root.end()) {
         if (!udpPort->is_number_integer() || udpPort->get<std::int64_t>() < 1 ||
@@ -121,9 +117,6 @@ bool loadHostConfig(const char* path, HostConfig& config, std::string& error) {
 void warnInsecureUrls(const HostConfig& config) {
     if (!startsWith(config.httpUrl, "https://")) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "config: http URL is not https:// (%s)", config.httpUrl.c_str());
-    }
-    if (!startsWith(config.masterUrl, "https://")) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "config: master URL is not https:// (%s)", config.masterUrl.c_str());
     }
     if (!config.socketUrl.empty() && !startsWith(config.socketUrl, "wss://") &&
         !startsWith(config.socketUrl, "tcp://")) {
