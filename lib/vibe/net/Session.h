@@ -27,6 +27,7 @@ struct SessionConfig {
     std::string socketUrl;
     bool udpUsage = false;
     int udpPort = 0;
+    TcpOptions tcp;
 };
 
 // What the session reports to its owner. Called from Session::update(), on

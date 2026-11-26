@@ -414,8 +414,8 @@ bool jsonTextToMsgpack(std::string_view jsonText, std::string& out) {
     return true;
 }
 
-bool encodeTcpContent(std::string_view jsonFrame, std::string_view clientKey, std::string& content, int& command,
-                      bool& secret, std::string& error) {
+bool encodeTcpContent(std::string_view jsonFrame, std::string_view clientKey, bool requestCompression,
+                      std::string& content, int& command, bool& secret, std::string& error) {
     Json frame = Json::parse(jsonFrame.begin(), jsonFrame.end(), nullptr, false);
     if (frame.is_discarded()) {
         return fail(error, "frame is not JSON");
@@ -432,6 +432,16 @@ bool encodeTcpContent(std::string_view jsonFrame, std::string_view clientKey, st
             data[1] = Json::binary(Json::binary_t::container_type(clientKey.begin(), clientKey.end()));
             if (data.size() > 4) {
                 data[4] = true;
+            }
+        }
+        if (requestCompression) {
+            while (data.size() < kTcpHandshakeCompressionIndex) {
+                data.push_back(nullptr);
+            }
+            if (data.size() == kTcpHandshakeCompressionIndex) {
+                data.push_back(true);
+            } else {
+                data[kTcpHandshakeCompressionIndex] = true;
             }
         }
     }
@@ -453,7 +463,7 @@ bool encodeTcpFrame(std::string_view jsonFrame, std::string& out, std::string& e
     std::string content;
     int command = 0;
     bool secret = false;
-    if (!encodeTcpContent(jsonFrame, {}, content, command, secret, error)) {
+    if (!encodeTcpContent(jsonFrame, {}, false, content, command, secret, error)) {
         return false;
     }
     writeTcpFrame(0, content, out);
@@ -464,6 +474,10 @@ bool encodeTcpFrame(std::string_view jsonFrame, std::string& out, std::string& e
 bool decodeTcpContent(std::uint8_t header, std::string_view content, std::string& jsonFrame, std::string& reason) {
     if (header & kTcpHeaderEncrypted) {
         reason = "an encrypted frame without a session key";
+        return false;
+    }
+    if (header & kTcpHeaderCompressed) {
+        reason = "a compressed frame that was not inflated";
         return false;
     }
     if (header & kTcpHeaderRawBytes) {
@@ -514,6 +528,15 @@ bool readTcpHandshake(std::string_view content, std::string& key, std::string& p
         key.assign(bytes.begin(), bytes.end());
     }
     return true;
+}
+
+bool readTcpHandshakeCompression(std::string_view content) {
+    Json frame;
+    if (!readCommandFrame(content, kTcpCommandHandshake, kTcpHandshakeAckCompressionIndex + 1, frame)) {
+        return false;
+    }
+    const Json& flag = frame[1][kTcpHandshakeAckCompressionIndex];
+    return flag.is_boolean() && flag.get<bool>();
 }
 
 bool readTcpHandshakeSession(std::string_view content, std::int64_t& sessionId, std::string& token) {

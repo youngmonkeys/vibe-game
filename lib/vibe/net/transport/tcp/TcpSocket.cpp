@@ -17,6 +17,7 @@
 #include "vibe/net/Encode.h"
 #include "vibe/net/Url.h"
 #include "vibe/net/transport/TcpCrypto.h"
+#include "vibe/net/transport/tcp/Deflate.h"
 #include "vibe/net/transport/tcp/Sockets.h"
 
 namespace vibe::net {
@@ -39,9 +40,7 @@ constexpr bool kDevBuild = true;
 constexpr bool kDevBuild = false;
 #endif
 
-constexpr bool kRequireSignedTcpHandshake = true;
 constexpr bool kAllowPlainSecrets = kDevBuild;
-constexpr bool kAllowUnverifiedServer = kDevBuild || !kRequireSignedTcpHandshake;
 
 std::unordered_map<int, TcpTransport*> gTransports;
 std::unordered_map<SDL_TimerID, TcpTransport*> gTimers;
@@ -221,7 +220,10 @@ Uint32 SDLCALL pingTimerFired(void*, SDL_TimerID timer, Uint32 interval) {
 
 } // namespace
 
-TcpTransport::TcpTransport(InboundQueue& inbound) : inbound_(inbound), reader_(kMaxInboundFrameBytes) {}
+TcpTransport::TcpTransport(InboundQueue& inbound, const TcpOptions& options)
+    : inbound_(inbound), options_(options), reader_(kMaxInboundFrameBytes) {
+    options_.compressionThreshold = std::max(0, options_.compressionThreshold);
+}
 
 TcpTransport::~TcpTransport() {
     abandon();
@@ -253,6 +255,7 @@ bool TcpTransport::open(const std::string& url) {
     open_ = false;
     closing_ = false;
     awaitingHandshake_ = false;
+    compression_ = false;
     reader_.reset();
     return true;
 }
@@ -265,14 +268,21 @@ bool TcpTransport::send(const std::string& text) {
     int command = 0;
     bool secret = false;
     TcpCrypto& crypto = connection_->crypto;
-    if (!encodeTcpContent(text, crypto.publicKey(), outContent_, command, secret, error)) {
+    if (!encodeTcpContent(text, crypto.publicKey(), options_.enableCompression, outContent_, command, secret, error)) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "net: cannot encode a TCP frame: %s", error.c_str());
         return false;
     }
     std::uint8_t flags = 0;
     if (command == kTcpCommandHandshake) {
         awaitingHandshake_ = true;
-    } else if (secret) {
+    } else if (compression_ && outContent_.size() >= static_cast<std::size_t>(options_.compressionThreshold) &&
+               deflateRaw(outContent_, sealed_) && sealed_.size() < outContent_.size()) {
+        wipe(outContent_);
+        outContent_.swap(sealed_);
+        flags = kTcpHeaderCompressed;
+    }
+    wipe(sealed_);
+    if (command != kTcpCommandHandshake && secret) {
         if (crypto.hasSessionKey()) {
             if (!crypto.encrypt(outContent_, sealed_, error)) {
                 wipe(outContent_);
@@ -282,7 +292,7 @@ bool TcpTransport::send(const std::string& text) {
             }
             outContent_.swap(sealed_);
             wipe(sealed_);
-            flags = kTcpHeaderEncrypted;
+            flags |= kTcpHeaderEncrypted;
         } else if (kAllowPlainSecrets) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                         "net: the server gave no session key; command %d goes in clear (dev build only)", command);
@@ -351,6 +361,7 @@ void TcpTransport::abandon() {
     open_ = false;
     closing_ = false;
     awaitingHandshake_ = false;
+    compression_ = false;
     reader_.reset();
 }
 
@@ -413,18 +424,27 @@ std::string TcpTransport::connectedHost() const {
 }
 
 bool TcpTransport::openContent(std::uint8_t& header, std::string& content, const char* what) {
-    if (!(header & kTcpHeaderEncrypted) || !connection_ || !connection_->crypto.hasSessionKey()) {
-        return true;
-    }
     std::string error;
-    const bool opened = connection_->crypto.decrypt(content, opened_, error);
-    wipe(content);
-    if (!opened) {
-        malformed_.warn(what, error.c_str());
-        return false;
+    if ((header & kTcpHeaderEncrypted) && connection_ && connection_->crypto.hasSessionKey()) {
+        const bool opened = connection_->crypto.decrypt(content, opened_, error);
+        wipe(content);
+        if (!opened) {
+            malformed_.warn(what, error.c_str());
+            return false;
+        }
+        content.swap(opened_);
+        header = static_cast<std::uint8_t>(header & ~kTcpHeaderEncrypted);
     }
-    content.swap(opened_);
-    header = static_cast<std::uint8_t>(header & ~kTcpHeaderEncrypted);
+    if ((header & kTcpHeaderCompressed) && !(header & kTcpHeaderEncrypted)) {
+        const bool inflated = inflateRaw(content, kMaxInboundFrameBytes, opened_, error);
+        wipe(content);
+        if (!inflated) {
+            malformed_.warn(what, error.c_str());
+            return false;
+        }
+        content.swap(opened_);
+        header = static_cast<std::uint8_t>(header & ~kTcpHeaderCompressed);
+    }
     return true;
 }
 
@@ -487,6 +507,10 @@ bool TcpTransport::readHandshake(const std::string& content) {
         return true;
     }
     awaitingHandshake_ = false;
+    compression_ = options_.enableCompression && readTcpHandshakeCompression(content);
+    if (options_.enableCompression) {
+        SDL_Log("net: TCP compression %s", compression_ ? "on" : "off (the server did not turn it on)");
+    }
     std::int64_t sessionId = 0;
     std::string token;
     if (readTcpHandshakeSession(content, sessionId, token)) {
@@ -501,39 +525,11 @@ bool TcpTransport::readHandshake(const std::string& content) {
         wipe(key);
         return false;
     }
-    std::string error;
-    if (proof.empty()) {
-        if (!kAllowUnverifiedServer) {
-            wipe(key);
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "net: the server did not sign the TCP handshake");
-            drop("the TCP server is not authenticated");
-            return false;
-        }
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "net: the server did not sign the TCP handshake; it is not authenticated (not enforced)");
-    } else {
-        bool trusted = false;
-        std::string subject;
-        if (!connection_->crypto.verifyServer(proof, key, connection_->host, trusted, subject, error)) {
-            wipe(key);
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "net: TCP handshake: %s", error.c_str());
-            drop("the TCP handshake signature is not valid");
-            return false;
-        }
-        if (trusted) {
-            SDL_Log("net: TCP server verified as %s (%s)", connection_->host.c_str(), subject.c_str());
-        } else if (kAllowUnverifiedServer) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "net: TCP handshake signed by %s, which is not trusted for %s (not enforced)",
-                        subject.c_str(), connection_->host.c_str());
-        } else {
-            wipe(key);
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "net: the TCP server certificate %s is not trusted for %s",
-                         subject.c_str(), connection_->host.c_str());
-            drop("the TCP server certificate is not trusted");
-            return false;
-        }
+    if (!verifyHandshake(proof, key)) {
+        wipe(key);
+        return false;
     }
+    std::string error;
     const bool accepted = connection_->crypto.acceptSessionKey(key, error);
     wipe(key);
     if (!accepted) {
@@ -542,6 +538,34 @@ bool TcpTransport::readHandshake(const std::string& content) {
         return false;
     }
     SDL_Log("net: TCP session key accepted; the login and chat are encrypted");
+    return true;
+}
+
+bool TcpTransport::verifyHandshake(const std::string& proof, const std::string& key) {
+    if (!options_.verifySslHandshake) {
+        SDL_Log("net: the TCP handshake signature is not verified (verifySslHandshake is off)");
+        return true;
+    }
+    if (proof.empty()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "net: the server did not sign the TCP handshake");
+        drop("the TCP server is not authenticated");
+        return false;
+    }
+    bool trusted = false;
+    std::string subject;
+    std::string error;
+    if (!connection_->crypto.verifyServer(proof, key, connection_->host, trusted, subject, error)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "net: TCP handshake: %s", error.c_str());
+        drop("the TCP handshake signature is not valid");
+        return false;
+    }
+    if (!trusted) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "net: the TCP server certificate %s is not trusted for %s",
+                     subject.c_str(), connection_->host.c_str());
+        drop("the TCP server certificate is not trusted");
+        return false;
+    }
+    SDL_Log("net: TCP server verified as %s (%s)", connection_->host.c_str(), subject.c_str());
     return true;
 }
 
@@ -564,6 +588,7 @@ void TcpTransport::finish(int code, bool clean, const char* reason) {
     open_ = false;
     closing_ = false;
     awaitingHandshake_ = false;
+    compression_ = false;
     reader_.reset();
     SocketClosed closed;
     closed.code = code;

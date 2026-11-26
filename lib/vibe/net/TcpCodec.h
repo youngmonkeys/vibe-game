@@ -23,6 +23,8 @@ inline constexpr int kTcpCommandUdpHandshake = 50;
 inline constexpr int kUdpHandshakeOk = 200;
 inline constexpr std::size_t kMaxUdpHandshakeTokenBytes = 512;
 inline constexpr int kMsgPackMaxDepth = 64;
+inline constexpr std::size_t kTcpHandshakeCompressionIndex = 7;
+inline constexpr std::size_t kTcpHandshakeAckCompressionIndex = 4;
 inline constexpr std::uint8_t kTcpServerProofVersion = 1;
 inline constexpr std::string_view kTcpHandshakeSignatureDomain = "ezyfox-handshake-v1";
 
@@ -37,14 +39,16 @@ bool jsonTextToMsgpack(std::string_view jsonText, std::string& out);
 
 bool encodeTcpFrame(std::string_view jsonFrame, std::string& out, std::string& error);
 
-bool encodeTcpContent(std::string_view jsonFrame, std::string_view clientKey, std::string& content, int& command,
-                      bool& secret, std::string& error);
+bool encodeTcpContent(std::string_view jsonFrame, std::string_view clientKey, bool requestCompression,
+                      std::string& content, int& command, bool& secret, std::string& error);
 
 void writeTcpFrame(std::uint8_t flags, std::string_view content, std::string& out);
 
 bool decodeTcpContent(std::uint8_t header, std::string_view content, std::string& jsonFrame, std::string& reason);
 
 bool readTcpHandshake(std::string_view content, std::string& key, std::string& proof);
+
+bool readTcpHandshakeCompression(std::string_view content);
 
 bool readTcpHandshakeSession(std::string_view content, std::int64_t& sessionId, std::string& token);
 

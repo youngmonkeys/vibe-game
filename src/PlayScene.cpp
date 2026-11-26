@@ -12,7 +12,7 @@ constexpr float kSizePx = 48.0f;
 
 vibe::net::SessionConfig sessionConfig(const vibe::HostConfig& config) {
     return vibe::net::SessionConfig{config.httpUrl, config.zoneName, config.appName,
-                                    config.socketUrl, config.udpUsage, config.udpPort};
+                                    config.socketUrl, config.udpUsage, config.udpPort, config.tcp};
 }
 
 vibe::input::ActionMap defaultActions() {

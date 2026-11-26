@@ -13,7 +13,7 @@ public:
     static constexpr int kHandshakeAttempts = 5;
     static constexpr int kHandshakeRetryMs = 1000;
 
-    explicit UdpTcpTransport(InboundQueue& inbound);
+    UdpTcpTransport(InboundQueue& inbound, const TcpOptions& options);
     ~UdpTcpTransport() override;
 
     bool usesUdp() const override { return true; }

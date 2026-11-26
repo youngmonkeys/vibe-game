@@ -64,6 +64,9 @@ vibe_add_game(MyGame
 | `udpPort` | no | Used instead of the instance's UDP port |
 | `udpUsage` | no | `true` adds the UDP channel on native builds; default `false` |
 | `autoLogin` | no | Start with the tokens a previous login stored; default `false` |
+| `enableCompression` | no | Native TCP only: ask the server to deflate frames (needs `compression-enable` on the EzyFox server) and deflate outgoing frames once it agrees; default `true` |
+| `compressionThreshold` | no | Smallest outgoing frame content, in bytes, that is deflated; default `512` |
+| `verifySslHandshake` | no | Native TCP only: require the server's signed handshake proof and a certificate trusted for the host before accepting the session key; default `false` |
 
 Pick another file per build with `-DVIBE_CONFIG_FILE=<path>`.
 

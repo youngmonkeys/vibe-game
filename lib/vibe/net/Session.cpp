@@ -78,7 +78,7 @@ const char* errorCommandName(Command command) {
 
 Session::Session(SessionConfig config, const Protocol& protocol, SessionListener& listener)
     : config_(std::move(config)), listener_(listener), inbound_(protocol), http_(inbound_),
-      socket_(newSocketTransport(inbound_, config_.udpUsage)), udpPort_(config_.udpPort) {}
+      socket_(newSocketTransport(inbound_, config_.udpUsage, config_.tcp)), udpPort_(config_.udpPort) {}
 
 const char* Session::stateName(State state) {
     switch (state) {

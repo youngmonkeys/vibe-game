@@ -75,6 +75,21 @@ set(SDLTTF_STRICT ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${sdl3_ttf_SOURCE_DIR}" "${sdl3_ttf_BINARY_DIR}" EXCLUDE_FROM_ALL SYSTEM)
 
+if(NOT EMSCRIPTEN)
+    FetchContent_Declare(zlib
+        URL https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz
+        URL_HASH SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+        SOURCE_SUBDIR vibe-populate-only)
+    FetchContent_MakeAvailable(zlib)
+    set(VIBE_ZLIB_SOURCES)
+    foreach(name adler32 compress crc32 deflate infback inffast inflate inftrees trees uncompr zutil)
+        list(APPEND VIBE_ZLIB_SOURCES "${zlib_SOURCE_DIR}/${name}.c")
+    endforeach()
+    add_library(vibe_zlib STATIC ${VIBE_ZLIB_SOURCES})
+    set_target_properties(vibe_zlib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(vibe_zlib SYSTEM PUBLIC "${zlib_SOURCE_DIR}")
+endif()
+
 # SYSTEM, so the decoder's warnings never trip this repo's -Werror.
 # lib/vibe/audio/Vorbis.cpp compiles the implementation.
 add_library(vibe_stb_vorbis INTERFACE)

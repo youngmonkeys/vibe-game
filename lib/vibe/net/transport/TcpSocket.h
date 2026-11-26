@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "vibe/core/HostConfig.h"
 #include "vibe/net/Queues.h"
 #include "vibe/net/TcpCodec.h"
 #include "vibe/net/WarnLimiter.h"
@@ -15,7 +16,7 @@ class TcpTransport {
 public:
     static constexpr int kConnectTimeoutMs = 10000;
 
-    explicit TcpTransport(InboundQueue& inbound);
+    TcpTransport(InboundQueue& inbound, const TcpOptions& options);
     virtual ~TcpTransport();
     TcpTransport(const TcpTransport&) = delete;
     TcpTransport& operator=(const TcpTransport&) = delete;
@@ -56,8 +57,11 @@ private:
     void finish(int code, bool clean, const char* reason);
     void drop(const char* reason);
     bool readHandshake(const std::string& content);
+    bool verifyHandshake(const std::string& proof, const std::string& key);
 
     InboundQueue& inbound_;
+    TcpOptions options_;
+    bool compression_ = false;
     std::shared_ptr<Connection> connection_;
     int socket_ = 0;
     bool open_ = false;

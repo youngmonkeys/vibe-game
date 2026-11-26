@@ -5,6 +5,14 @@
 
 namespace vibe {
 
+struct TcpOptions {
+    static constexpr int kDefaultCompressionThreshold = 512;
+
+    bool verifySslHandshake = false;
+    bool enableCompression = true;
+    int compressionThreshold = kDefaultCompressionThreshold;
+};
+
 // Where the client finds the server (research/protocol.md, Local config).
 // Read from /config/configs.json in the preload package.
 struct HostConfig {
@@ -21,6 +29,7 @@ struct HostConfig {
     // On the web those live in sessionStorage, so this covers a reload of the
     // same tab only.
     bool autoLogin = false;
+    TcpOptions tcp;
 };
 
 // Parses the text of configs.json. On failure returns false and sets `error`

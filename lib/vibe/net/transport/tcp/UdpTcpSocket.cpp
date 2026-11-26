@@ -161,8 +161,8 @@ int SDLCALL runUdp(void* userdata) {
 
 } // namespace
 
-UdpTcpTransport::UdpTcpTransport(InboundQueue& inbound)
-    : TcpTransport(inbound), udpReader_(kMaxDatagramBytes) {}
+UdpTcpTransport::UdpTcpTransport(InboundQueue& inbound, const TcpOptions& options)
+    : TcpTransport(inbound, options), udpReader_(kMaxDatagramBytes) {}
 
 UdpTcpTransport::~UdpTcpTransport() {
     onConnectionGone();

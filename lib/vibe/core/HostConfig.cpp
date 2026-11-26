@@ -7,6 +7,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 #include <cstdint>
+#include <limits>
 #include <nlohmann/json.hpp>
 
 namespace vibe {
@@ -75,8 +76,18 @@ bool parseHostConfig(std::string_view text, HostConfig& config, std::string& err
     parsed.appName = app_info::kSocketAppName;
     if (!readUrl(root, "http", true, parsed.httpUrl, error) ||
         !readUrl(root, kSocketUrlKey, false, parsed.socketUrl, error) ||
-        !readFlag(root, "udpUsage", parsed.udpUsage, error) || !readFlag(root, "autoLogin", parsed.autoLogin, error)) {
+        !readFlag(root, "udpUsage", parsed.udpUsage, error) || !readFlag(root, "autoLogin", parsed.autoLogin, error) ||
+        !readFlag(root, "verifySslHandshake", parsed.tcp.verifySslHandshake, error) ||
+        !readFlag(root, "enableCompression", parsed.tcp.enableCompression, error)) {
         return false;
+    }
+    if (const auto threshold = root.find("compressionThreshold"); threshold != root.end()) {
+        if (!threshold->is_number_integer() || threshold->get<std::int64_t>() < 0 ||
+            threshold->get<std::int64_t>() > std::numeric_limits<int>::max()) {
+            error = "field compressionThreshold is not a byte count 0 or more";
+            return false;
+        }
+        parsed.tcp.compressionThreshold = static_cast<int>(threshold->get<std::int64_t>());
     }
     if (const auto udpPort = root.find("udpPort"); udpPort != root.end()) {
         if (!udpPort->is_number_integer() || udpPort->get<std::int64_t>() < 1 ||
@@ -108,7 +119,9 @@ bool loadHostConfig(const char* path, HostConfig& config, std::string& error) {
             SDL_Log("config: udpUsage is true and ignored; every command, `s` included, uses the WebSocket");
         }
 #else
-        SDL_Log("config: socket transport %s", config.udpUsage ? "TCP and UDP" : "TCP");
+        SDL_Log("config: socket transport %s, compression %s (threshold %d bytes), handshake signature %s",
+                config.udpUsage ? "TCP and UDP" : "TCP", config.tcp.enableCompression ? "on" : "off",
+                config.tcp.compressionThreshold, config.tcp.verifySslHandshake ? "verified" : "not verified");
 #endif
     }
     return ok;
