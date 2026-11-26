@@ -1,6 +1,6 @@
 # Vibe Game
 
-Vibe Game is a base project for 2D games in C++20 on SDL3. One code base builds for the browser (WebAssembly), macOS, iOS, Android, Windows and Linux, and talks to an EzyPlatform / EzyFox game server out of the box. The engine lives in `lib/`. You write your game in `src/`.
+Vibe Game is a base project for games in C++20 on SDL3. The world is 3D by default; a 2D game is the same world with z kept at 0 (see [The world is 3D](#the-world-is-3d)). One code base builds for the browser (WebAssembly), macOS, iOS, Android, Windows and Linux, and talks to an EzyPlatform / EzyFox game server out of the box. The engine lives in `lib/`. You write your game in `src/`.
 
 ## Layout
 
